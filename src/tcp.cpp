@@ -363,7 +363,8 @@ TcpSrc::inflate_window() {
   
 	if (_mSrc==NULL){
 	    //int tt = (newly_acked * _mss) % _cwnd;
-	    _cwnd += (newly_acked * _mss) / _cwnd;  //XXX beware large windows, when this increase gets to be very small
+	    // Note: max function here comes from RFC 5481, section 3.1
+	    _cwnd += max((newly_acked * _mss) / _cwnd, (uint32_t)1);
 
 	    //if (rand()%_cwnd < tt)
 	    //_cwnd++;
