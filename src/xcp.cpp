@@ -333,7 +333,7 @@ XcpSrc::receivePacket(Packet& pkt)
 	retransmit_packet();
 	send_packets();
 }
-
+/*
 // MAY NEED MODIFICATION: RFC 5681 Page 8 TOP
 void XcpSrc::deflate_window(){
     //_ssthresh = max(_cwnd/2, (uint32_t)(2 * _mss));
@@ -342,7 +342,7 @@ void XcpSrc::deflate_window(){
 // NEED MODIFICATION
 void
 XcpSrc::inflate_window() {
- /*This is TCP implementation
+This is TCP implementation
     int newly_acked = (_last_acked + _cwnd) - _highest_sent;
     // be very conservative - possibly not the best we can do, but
     // the alternative has bad side effects.
@@ -365,12 +365,9 @@ XcpSrc::inflate_window() {
 	    _sawtooth ++;
 	}
     }
-*/
-
-
 
 }
-
+*/
 // Note: the data sequence number is the number of Byte1 of the packet, not the last byte.
 void 
 XcpSrc::send_packets() {

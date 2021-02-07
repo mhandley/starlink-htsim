@@ -89,8 +89,8 @@ class XcpSrc : public PacketSink, public EventSource {
 	
     int _subflow_id;
 
-    virtual void inflate_window();
-    virtual void deflate_window();
+    //virtual void inflate_window();
+    //virtual void deflate_window();
 
  private:
 
