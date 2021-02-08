@@ -390,7 +390,7 @@ XcpSrc::send_packets() {
     }
 
     if (_app_limited >= 0 && _rtt > 0) {
-		uint64_t d = (uint64_t)_app_limited * _rtt / timeAsSec(1);
+		uint64_t d = (uint64_t)_app_limited * _rtt / timeFromSec(1);
 		if (c > d) {
 			c = d;
 		}
