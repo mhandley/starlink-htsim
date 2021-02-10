@@ -19,10 +19,11 @@ XcpQueue::XcpQueue(linkspeed_bps bitrate, mem_b maxsize,
     _control_interval = timeFromMs(100);
     cout << "bitrate: " << bitrate << " target: " << _target_bitrate << endl;
 }
-
+/*
 #define XCP_ALPHA 0.4
 #define XCP_GAMMA 0.1
 #define P_RTT 0.05
+*/
 void
 XcpQueue::receivePacket(Packet& pkt) 
 {
@@ -30,74 +31,75 @@ XcpQueue::receivePacket(Packet& pkt)
     simtime_picosec now = eventlist().now();
     
     if (now - _last_update > _control_interval) {
-	cout << "recalculating stats, now " << timeAsMs(now) << "\n";
-	cout << "td: " << timeAsMs(now - _last_update) << " ci: " << timeAsMs(_control_interval) << endl;
-	// time to calculate stats
-	if (_mean_rtt == 0) {
-	    _mean_bitrate = 0;
-	    cout << timeAsMs(now) << " bitrate2: " << _mean_bitrate << endl;
-	} else {
-	    _mean_bitrate = _bytes_forwarded * 8 * timeFromSec(1) / (now - _last_update);
-	}
-	cout << timeAsMs(now) << " bitrate: " << _mean_bitrate << " bytes " << _bytes_forwarded << endl;
-	_control_interval = _mean_rtt;
-	cout << "target: " << _target_bitrate;
-	_rate_to_allocate = _target_bitrate - _mean_bitrate;
+		update_persistent_queue_size();
+		cout << "recalculating stats, now " << timeAsMs(now) << "\n";
+		cout << "td: " << timeAsMs(now - _last_update) << " ci: " << timeAsMs(_control_interval) << endl;
+		// time to calculate stats
+		if (_mean_rtt == 0) {
+	    	_mean_bitrate = 0;
+	    	cout << timeAsMs(now) << " bitrate2: " << _mean_bitrate << endl;
+		} else {
+	    	_mean_bitrate = _bytes_forwarded * 8 * timeFromSec(1) / (now - _last_update);
+		}
+		cout << timeAsMs(now) << " bitrate: " << _mean_bitrate << " bytes " << _bytes_forwarded << endl;
+		_control_interval = _mean_rtt;
+		cout << "target: " << _target_bitrate;
+		_rate_to_allocate = _target_bitrate - _mean_bitrate;
 
-	cout << "rta: " << _rate_to_allocate << endl;
-	_sigma_bytes = XCP_ALPHA * (_rate_to_allocate >> 3) * timeAsSec(_control_interval);
-	cout << "sigma: " << _sigma_bytes << endl;
+		cout << "rta: " << _rate_to_allocate << endl;
+		_sigma_bytes = XCP_ALPHA * (_rate_to_allocate >> 3) * timeAsSec(_control_interval) - XCP_BETA * _persistent_queue_size;
+		cout << "sigma: " << _sigma_bytes << endl;
 
-	mem_b h_bytes = XCP_GAMMA * _bytes_forwarded - _sigma_bytes;
-	if (h_bytes < 0) {
-	    h_bytes= 0;
-	}
+		mem_b h_bytes = XCP_GAMMA * _bytes_forwarded - (_sigma_bytes > 0 ? _sigma_bytes : -_sigma_bytes);
+		if (h_bytes < 0) {
+	    	h_bytes= 0;
+		}
 
-	cout << "h: " << h_bytes << endl;
+		cout << "h: " << h_bytes << endl;
 	
-	mem_b sigma_pos = _sigma_bytes;
-	if (sigma_pos < 0) {
-	    sigma_pos = 0;
-	}
+		mem_b sigma_pos = _sigma_bytes;
+		if (sigma_pos < 0) {
+	    	sigma_pos = 0;
+		}
 
-	if (_mean_rtt * _p_sum == 0) {
-	    _epsilon_p = 0;
-	} else {
-	    _epsilon_p = (h_bytes + sigma_pos) / (timeAsSec(_mean_rtt) * _p_sum);
-	}
-	_p_sum = 0;
+		if (_mean_rtt * _p_sum == 0) {
+	    	_epsilon_p = 0;
+		} else {
+	    	_epsilon_p = (h_bytes + sigma_pos) / (timeAsSec(_mean_rtt) * _p_sum);
+		}
+		_p_sum = 0;
 
-	mem_b sigma_neg = -_sigma_bytes;
-	if (sigma_neg < 0) {
-	    sigma_neg = 0;
-	}
+		mem_b sigma_neg = -_sigma_bytes;
+		if (sigma_neg < 0) {
+	    	sigma_neg = 0;
+		}
 
-	if (_mean_rtt * _bytes_forwarded == 0) {
-	    _epsilon_n = 0;
-	    cout << "en: here\n";
-	} else {
-	    _epsilon_n = (h_bytes + sigma_neg) / (timeAsSec(_mean_rtt) * _bytes_forwarded);
-	    cout << "en: sigma_neg: " << sigma_neg << endl;
-	}
+		if (_mean_rtt * _bytes_forwarded == 0) {
+	    	_epsilon_n = 0;
+	    	cout << "en: here\n";
+		} else {
+	    	_epsilon_n = (h_bytes + sigma_neg) / (timeAsSec(_mean_rtt) * _bytes_forwarded);
+	    	cout << "en: sigma_neg: " << sigma_neg << endl;
+		}
 
-	_bytes_forwarded = 0;
-	_data_packets_forwarded = 0;
-	_last_update = now;
-	cout << timeAsMs(now) << " ep: " << _epsilon_p << " en: " << _epsilon_n << endl;
+		_bytes_forwarded = 0;
+		_data_packets_forwarded = 0;
+		_last_update = now;
+		cout << timeAsMs(now) << " ep: " << _epsilon_p << " en: " << _epsilon_n << endl;
     }
 
+    if (crt > _maxsize) {
+		/* drop the packet */
+		if (_logger) _logger->logQueue(*this, QueueLogger::PKT_DROP, pkt);
+		pkt.flow().logTraffic(pkt, *this, TrafficLogger::PKT_DROP);
+		_num_drops++;
+		pkt.free();
+		return;
+    }
+	
     _bytes_forwarded += pkt.size();
     _data_packets_forwarded++;
 
-
-    if (crt > _maxsize) {
-	/* drop the packet */
-	if (_logger) _logger->logQueue(*this, QueueLogger::PKT_DROP, pkt);
-	pkt.flow().logTraffic(pkt, *this, TrafficLogger::PKT_DROP);
-	_num_drops++;
-	pkt.free();
-	return;
-    }
 
     XcpPacket* xcp_pkt = static_cast<XcpPacket*>(&pkt);
     simtime_picosec rtt = xcp_pkt->rtt();
@@ -109,16 +111,16 @@ XcpQueue::receivePacket(Packet& pkt)
     // update mean RTT using EWMA
     _mean_rtt = P_RTT * rtt + (1-P_RTT) * _mean_rtt;
 
-    _p_sum += (psize * rtt)/ cwnd;  // units:  picoseconds (per packet)
+    _p_sum += (psize * timeAsSec(rtt)) / cwnd;
     // p_i is positive per packet feedback
     float p_i = _epsilon_p * timeAsSec(rtt) * timeAsSec(rtt) * psize / cwnd;
     // n_i is negative per packet feedback
     float n_i = _epsilon_n * timeAsSec(rtt) * psize;
-    uint32_t h_feedback = p_i + n_i;
+    int32_t h_feedback = p_i - n_i;
     cout << timeAsMs(now) << " p_i " << p_i << " n_i " << n_i << endl;
     cout << timeAsMs(now) << " h_fb " << h_feedback << endl;
     if (demand < h_feedback) {
-	h_feedback = demand;
+		h_feedback = demand;
     }
     xcp_pkt->set_demand(h_feedback);
 
@@ -129,11 +131,54 @@ XcpQueue::receivePacket(Packet& pkt)
     _queuesize += pkt.size();
 
     if (_logger) 
-	_logger->logQueue(*this, QueueLogger::PKT_ENQUEUE, pkt);
+		_logger->logQueue(*this, QueueLogger::PKT_ENQUEUE, pkt);
 
     if (queueWasEmpty) {
-	/* schedule the dequeue event */
-	assert(_enqueued.size()==1);
+		/* schedule the dequeue event */
+		assert(_enqueued.size()==1);
+		beginService();
+    }
+}
+
+void
+XcpQueue::completeService()
+{
+	update_persistent_queue_size();
+    if (_enqueued.empty()) {
+		// queue must have been explicitly cleared
+		return;
+    }
+
+    /* dequeue the packet */
+    Packet* pkt = _enqueued.back();
+    _enqueued.pop_back();
+    _queuesize -= pkt->size();
+    pkt->flow().logTraffic(*pkt, *this, TrafficLogger::PKT_DEPART);
+    if (_logger) _logger->logQueue(*this, QueueLogger::PKT_SERVICE, *pkt);
+
+    /* tell the packet to move on to the next pipe */
+    pkt->sendOn();
+
+	if (_min_queue_size > queuesize()) {
+		_min_queue_size = queuesize();
+	}
+
+    if (!_enqueued.empty()) {
+	/* schedule the next dequeue event */
 	beginService();
     }
+}
+
+void
+XcpQueue::update_persistent_queue_size() {
+	if (_queue_update_time <= eventlist().now()) {
+		_persistent_queue_size = _min_queue_size;
+		_min_queue_size = queuesize();
+		simtime_picosec Tq = XCP_TOLERATE_QUEUE_TIME;
+		simtime_picosec Tq2 = (_mean_rtt - _queuesize * timeFromSec(1) * 8.0 / _bitrate) / 2.0;
+		if (Tq < Tq2) {
+			Tq = Tq2;
+		}
+		_queue_update_time = eventlist().now() + Tq;
+	}
 }
