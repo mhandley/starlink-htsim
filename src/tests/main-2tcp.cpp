@@ -29,9 +29,13 @@ int main() {
     TcpSinkLoggerSampling sink_1_Logger(timeFromMs(1000), eventlist);
     TcpSinkLoggerSampling sink_2_Logger(timeFromMs(1000), eventlist);
     QueueLoggerSampling queueLogger(timeFromMs(10), eventlist);
+    QueueLoggerSampling feeder_1_queueLogger(timeFromMs(10), eventlist);
+    QueueLoggerSampling feeder_2_queueLogger(timeFromMs(10), eventlist);
     logfile.addLogger(sink_1_Logger);
     logfile.addLogger(sink_2_Logger);
     logfile.addLogger(queueLogger);
+    logfile.addLogger(feeder_1_queueLogger);
+    logfile.addLogger(feeder_2_queueLogger);
 
     TcpRtxTimerScanner tcpRtxScanner(timeFromMs(10), eventlist);
     Packet::set_packet_size(566);
@@ -65,11 +69,11 @@ int main() {
 #define EGRESS_LINKSPEED_1 speedFromMbps((uint64_t)20)
 #define EGRESS_LINKSPEED_2 speedFromMbps((uint64_t)20)
 
-    Queue src_1_queue(INGRESS_LINKSPEED_1, FEEDER_BUFFER_1, eventlist,NULL);
+    Queue src_1_queue(INGRESS_LINKSPEED_1, FEEDER_BUFFER_1, eventlist, &feeder_1_queueLogger);
     src_1_queue.setName("Src_1_Queue");
     logfile.writeName(src_1_queue);
 
-    Queue src_2_queue(INGRESS_LINKSPEED_2, FEEDER_BUFFER_2, eventlist,NULL);
+    Queue src_2_queue(INGRESS_LINKSPEED_2, FEEDER_BUFFER_2, eventlist, &feeder_2_queueLogger);
     src_2_queue.setName("Src_2_Queue");
     logfile.writeName(src_2_queue);
 
