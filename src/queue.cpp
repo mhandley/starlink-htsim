@@ -110,6 +110,7 @@ Queue::receivePacket(Packet& pkt)
 	pkt.flow().logTraffic(pkt, *this, TrafficLogger::PKT_DROP);
 	pkt.free();
 	_num_drops++;
+    //cout << "DROPPED" << endl;
 	return;
     }
     pkt.flow().logTraffic(pkt, *this, TrafficLogger::PKT_ARRIVE);
