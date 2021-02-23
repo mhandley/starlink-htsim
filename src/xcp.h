@@ -94,7 +94,7 @@ class XcpSrc : public PacketSink, public EventSource {
 
  private:
 
-    static const uint32_t MAX_THROUGHPUT = UINT32_MAX;
+    static const int32_t MAX_THROUGHPUT = INT32_MAX;
 
     const Route* _old_route;
     uint64_t _last_packet_with_old_route;
@@ -126,7 +126,7 @@ class XcpSink : public PacketSink, public DataReceiver, public Logged {
     XcpAck::seq_t _cumulative_ack; // the packet we have cumulatively acked
     uint64_t _packets;
     uint32_t _drops;
-    uint64_t cumulative_ack(){ return _cumulative_ack + _received.size()*1000;}
+    uint64_t cumulative_ack(){ return _cumulative_ack + _received.size() * Packet::data_packet_size();}
     uint32_t drops(){ return _src->_drops;}
     uint32_t get_id(){ return id;}
     virtual const string& nodename() { return _nodename; }
@@ -142,7 +142,7 @@ class XcpSink : public PacketSink, public DataReceiver, public Logged {
     const Route* _route;
 
     // Mechanism
-    void send_ack(simtime_picosec ts,bool marked, uint32_t cwnd, uint32_t demand,
+    void send_ack(simtime_picosec ts,bool marked, uint32_t cwnd, int32_t demand,
 		  simtime_picosec rtt);
 
     string _nodename;

@@ -182,13 +182,16 @@ XcpSrc::receivePacket(Packet& pkt)
 	int64_t signed_cwnd = _cwnd;
 	signed_cwnd += static_cast<int64_t>(p->allowed_demand());// * static_cast<int64_t>(_rtt) / 1000000000;
 
+	cout << "SOURCE RECEIVE ALLOWED DEMAND: " << p->allowed_demand() << endl;
 	if (signed_cwnd > static_cast<int64_t>(_maxcwnd)) {
-		_cwnd = _maxcwnd;
+		signed_cwnd = _maxcwnd;
 	}
 
 	if (signed_cwnd < static_cast<int64_t>(_mss)) {
-		_cwnd = _mss;
+		signed_cwnd = _mss;
 	}
+
+	_cwnd = signed_cwnd;
 
     if (seqno > _last_acked) { // a brand new ack
         if (_old_route){
@@ -373,7 +376,7 @@ void
 XcpSrc::send_packets() {
     int c = _cwnd;
 
-	uint32_t demand = MAX_THROUGHPUT;
+	int32_t demand = MAX_THROUGHPUT;
 
     if (!_established){
 		//send SYN packet and wait for SYN/ACK
@@ -426,7 +429,7 @@ XcpSrc::send_packets() {
 
 void 
 XcpSrc::retransmit_packet() {
-	uint32_t demand = MAX_THROUGHPUT;
+	int32_t demand = MAX_THROUGHPUT;
     if (!_established){
 		assert(_highest_sent == 1);
 
@@ -566,7 +569,6 @@ XcpSink::receivePacket(Packet& pkt) {
 
     int size = p->size(); // TODO: the following code assumes all packets are the same size
     pkt.flow().logTraffic(pkt,*this,TrafficLogger::PKT_RCVDESTROY);
-    p->free();
 
     //_packets += p->size();
 
@@ -602,10 +604,14 @@ XcpSink::receivePacket(Packet& pkt) {
     }
     //send_ack(ts, marked, p->cwnd(), p->demand(), p->rtt());
 	send_ack(ts, false, p->cwnd(), p->demand(), p->rtt());
+
+	cout << "SENDING ACK: DEMAND: " << p->demand() << endl;
+
+	p->free();
 }
 
 void 
-XcpSink::send_ack(simtime_picosec ts, bool marked, uint32_t cwnd, uint32_t demand,
+XcpSink::send_ack(simtime_picosec ts, bool marked, uint32_t cwnd, int32_t demand,
 		  simtime_picosec rtt) {
     const Route* rt = _route;
     

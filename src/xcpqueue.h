@@ -26,22 +26,26 @@ class XcpQueue : public Queue {
     uint32_t _data_packets_forwarded; // data packets forwarded since start of interval 
     linkspeed_bps _mean_bitrate;      // mean link bitrate measured over last interval
     simtime_picosec _mean_rtt;        // mean flow RTT (EWMA)
-    simtime_picosec _p_sum;           // parameter to calculate epsilon_p 
+    double _p_sum;           // parameter to calculate epsilon_p 
     float _epsilon_p, _epsilon_n;
     simtime_picosec _control_interval; // set to mean RTT at start of control interval
-    linkspeed_bps _rate_to_allocate;  // How much bitrate we have left to
+    int64_t _rate_to_allocate;  // How much bitrate we have left to
                                       // allocate in the current interval
     mem_b _sigma_bytes;
 
     simtime_picosec _queue_update_time;
     mem_b _persistent_queue_size;
     mem_b _min_queue_size;
+    int64_t _residue_pos_feedback;
+    int64_t _residue_neg_feedback;
 
-    static const double XCP_ALPHA = 0.4;
-    static const double XCP_BETA = 0.226;
-    static const double XCP_GAMMA = 0.1;
-    static const simtime_picosec XCP_TOLERATE_QUEUE_TIME = 2000000000;  // 2000000000 picoseconds(2ms)
-    static const double P_RTT = 0.05;
+    static const double XCP_ALPHA;
+    static const double XCP_BETA;
+    static const double XCP_GAMMA;
+    static const simtime_picosec XCP_TOLERATE_QUEUE_TIME;
+    static const double P_RTT;
+    static const simtime_picosec MIN_IDLE_INTERVAL;
+    static const simtime_picosec MAX_PACKET_RTT;
 
     void update_persistent_queue_size();
 };
