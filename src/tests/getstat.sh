@@ -1,6 +1,21 @@
 #!/usr/bin/bash
 
+# make
+# ./1xcp > 1xcp_out.txt
+# ../parse_output xcp.log -ascii > 1xcp_out_log.txt
+# cat 1xcp_out_log.txt | grep XCP_SINK > temp.txt
+
+# make
+# ./1tcp > 1tcp_out.txt
+# ../parse_output tcp.log -ascii > 1tcp_out_log.txt
+# cat 1tcp_out_log.txt | grep TCP_SINK > temp1.txt
+
+# make
+# ./2xcp > 2xcp_out.txt
+# ../parse_output xcp2.log -ascii > 2xcp_out_log.txt
+# cat 2xcp_out_log.txt | grep XCP_SINK > temp2xcp.txt
+
 make
-./2tcp > 2out.txt
-../parse_output tcp2.log -ascii > 2outlog.txt
-cat 2outlog.txt | grep TCP_SINK > temp.txt
+./4xcp > 4xcp_out.txt
+../parse_output xcp4.log -ascii > 4xcp_out_log.txt
+cat 4xcp_out_log.txt | grep XCP_SINK > temp4xcp.txt
