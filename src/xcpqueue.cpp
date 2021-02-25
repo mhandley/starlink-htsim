@@ -26,7 +26,9 @@ XcpQueue::XcpQueue(linkspeed_bps bitrate, mem_b maxsize,
       _epsilon_p(0),
       _epsilon_n(0),
 	  _residue_neg_feedback(0),
-	  _residue_pos_feedback(0)
+	  _residue_pos_feedback(0),
+      _min_queue_size(0),
+      _queue_update_time(0)
 {
     _control_interval = timeFromMs(100);
     cout << "bitrate: " << bitrate << " target: " << _target_bitrate << endl;
@@ -39,6 +41,8 @@ XcpQueue::XcpQueue(linkspeed_bps bitrate, mem_b maxsize,
 void
 XcpQueue::receivePacket(Packet& pkt) 
 {
+    cout << "Queue update time: " << _queue_update_time << endl;
+
     int crt = _queuesize + pkt.size();
     simtime_picosec now = eventlist().now();
 
@@ -171,9 +175,8 @@ XcpQueue::receivePacket(Packet& pkt)
 		if (_residue_neg_feedback <= 0) {
 			_epsilon_n = 0;
 		}
-        xcp_pkt->set_demand(h_feedback);
 
-        cout << "Queuesize: " << queuesize() << "Feedback: " << xcp_pkt->demand() << endl;
+        cout << "Queuesize: " << queuesize() << " My NAME: " << _nodename << " Feedback: " << xcp_pkt->demand() << " Seqno: " << xcp_pkt->seqno() << " Next Hop: " << xcp_pkt->nexthop() << endl;
     }
 
 	if (crt > _maxsize) {
@@ -215,6 +218,7 @@ XcpQueue::completeService()
     Packet* pkt = _enqueued.back();
     _enqueued.pop_back();
     _queuesize -= pkt->size();
+
     pkt->flow().logTraffic(*pkt, *this, TrafficLogger::PKT_DEPART);
     if (_logger) _logger->logQueue(*this, QueueLogger::PKT_SERVICE, *pkt);
 
@@ -236,6 +240,7 @@ XcpQueue::update_persistent_queue_size() {
     if (_queue_update_time <= eventlist().now()) {
         _persistent_queue_size = _min_queue_size;
         _min_queue_size = queuesize();
+
         simtime_picosec Tq = XCP_TOLERATE_QUEUE_TIME;
         //simtime_picosec Tq2 = (_mean_rtt - _queuesize * timeFromSec(1) * 8.0 / _bitrate) / 2.0;
 		int64_t Tq2 = (static_cast<double>(_mean_rtt) - _queuesize * static_cast<double>(timeFromSec(1)) * 8.0 / static_cast<double>(_bitrate)) / 2.0;
