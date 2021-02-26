@@ -18,7 +18,7 @@ public:
 
     inline static XcpPacket* newpkt(PacketFlow &flow, const Route &route, 
 				    seq_t seqno, int size,
-				    uint32_t cwnd, uint32_t demand, simtime_picosec rtt) {
+				    uint32_t cwnd, int32_t demand, simtime_picosec rtt) {
 	XcpPacket* p = _packetdb.allocPacket();
 	p->set_route(flow,route,size,seqno+size-1); // The TCP sequence number is the first byte of the packet; I will ID the packet by its last byte.
 	p->_type = TCP;
@@ -26,12 +26,12 @@ public:
 	p->_syn = false;
 	p->_rtt = rtt;
 	p->_cwnd = cwnd;
-	p->_demand = demand;
+	p->_demand = demand;  // Bytes
 	return p;
     }
 
     inline static XcpPacket* new_syn_pkt(PacketFlow &flow, const Route &route, 
-					 seq_t seqno, int size, uint32_t demand) {
+					 seq_t seqno, int size, int32_t demand) {
 	XcpPacket* p = newpkt(flow,route,seqno, size, size, demand, 0);
 	p->_syn = true;
 	return p;
@@ -44,15 +44,15 @@ public:
     inline void set_ts(simtime_picosec ts) {_ts = ts;}
     inline simtime_picosec rtt() const {return _rtt;}
     inline uint32_t cwnd() const {return _cwnd;}
-    inline uint32_t demand() const {return _demand;}
-    inline void set_demand(uint32_t demand)  {_demand = demand;}
+    inline int32_t demand() const {return _demand;}
+    inline void set_demand(int32_t demand)  {_demand = demand;}
 protected:
     seq_t _seqno;
     bool _syn;
     simtime_picosec _ts;
     simtime_picosec _rtt;
     uint32_t _cwnd;
-    uint32_t _demand;
+    int32_t _demand;
     static PacketDB<XcpPacket> _packetdb;
 };
 
@@ -62,7 +62,7 @@ public:
 
     inline static XcpAck* newpkt(PacketFlow &flow, const Route &route, 
 				 seq_t seqno, seq_t ackno,
-				 uint32_t cwnd_echo, uint32_t demand, simtime_picosec rtt_echo) {
+				 uint32_t cwnd_echo, int32_t demand, simtime_picosec rtt_echo) {
 	XcpAck* p = _packetdb.allocPacket();
 	p->set_route(flow,route,ACKSIZE,ackno);
 	p->_type = XCPACK;
@@ -79,6 +79,7 @@ public:
     inline seq_t ackno() const {return _ackno;}
     inline simtime_picosec ts_echo() const {return _ts_echo;}
     inline void set_ts_echo(simtime_picosec ts) {_ts_echo = ts;}
+    inline int32_t allowed_demand() const {return _allowed_demand;}
 
     virtual ~XcpAck(){}
     const static int ACKSIZE=40;
@@ -88,7 +89,7 @@ protected:
     simtime_picosec _ts_echo;
     simtime_picosec _rtt_echo; // echoed so we know what we sent with the data packet
     uint32_t _cwnd_echo;  // echoed so we know what we sent with the data packet
-    uint32_t _allowed_demand;
+    int32_t _allowed_demand;
     static PacketDB<XcpAck> _packetdb;
 };
 

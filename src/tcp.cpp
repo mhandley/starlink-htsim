@@ -9,6 +9,9 @@
 //  TCP SOURCE
 ////////////////////////////////////////////////////////////////
 
+//static mem_b last_cwnd = 0;
+//static bool last_in_fast_recovery = 0;
+
 TcpSrc::TcpSrc(TcpLogger* logger, TrafficLogger* pktlogger, 
 	       EventList &eventlist)
     : EventSource(eventlist,"tcp"),  _logger(logger), _flow(pktlogger)
@@ -130,6 +133,20 @@ TcpSrc::receivePacket(Packet& pkt)
     simtime_picosec ts;
     TcpAck *p = (TcpAck*)(&pkt);
     TcpAck::seq_t seqno = p->ackno();
+
+	// cout << "ACK: " << seqno << endl;
+
+	// //if (last_cwnd > _cwnd) {
+	// 	cout << "IN FAST RECOVERY? " << _in_fast_recovery << endl;
+	// 	cout << timeAsMs(eventlist().now()) << " LAST CWND: " << last_cwnd << " CWND: " << _cwnd << endl;
+	// //}
+
+	// if (last_in_fast_recovery != _in_fast_recovery) {
+	// 	cout << "CHANGED INTO FR: " << _in_fast_recovery << endl;
+	// }
+
+	// last_in_fast_recovery = _in_fast_recovery;
+	// last_cwnd = _cwnd;
 
 #ifdef MODEL_RECEIVE_WINDOW
     if (_mSrc)
@@ -310,6 +327,8 @@ TcpSrc::receivePacket(Packet& pkt)
   
     //only count drops in CA state
     _drops++;
+
+	//cout << "FAST RECOVERY" << endl;
   
     deflate_window();
   
@@ -334,10 +353,12 @@ TcpSrc::receivePacket(Packet& pkt)
 }
 
 void TcpSrc::deflate_window(){
+	//cout << _eventlist.now() / 1000000000.0 << "  DEFLATING WINDOW" << endl;
     if (_mSrc==NULL)
 	_ssthresh = max(_cwnd/2, (uint32_t)(2 * _mss));
     else
 	_ssthresh = _mSrc->deflate_window(_cwnd,_mss);
+	//cout << _ssthresh << "   " << _cwnd << endl;
 }
 
 void
@@ -471,6 +492,8 @@ TcpSrc::send_packets() {
 	if(_RFC2988_RTO_timeout == timeInf) {// RFC2988 5.1
 	    _RFC2988_RTO_timeout = eventlist().now() + _rto;
 	}
+
+	//cout << "SEND: " << p->seqno() << endl;
     }
 }
 
@@ -577,6 +600,8 @@ void TcpSrc::doNextEvent() {
 	    uint32_t flightsize = _highest_sent - _last_acked;
 	    _cwnd = min(_ssthresh, flightsize + _mss);
 	}
+
+	//cout << "TIMEOUT" << endl;
 
 	deflate_window();
 

@@ -44,30 +44,31 @@ class XcpSrc : public PacketSink, public EventSource {
 
     void set_ssthresh(uint64_t s){_ssthresh = s;}
 
-    uint32_t effective_window();
+    //uint32_t effective_window();
     virtual void rtx_timer_hook(simtime_picosec now,simtime_picosec period);
     virtual const string& nodename() { return _nodename; }
 
     // should really be private, but loggers want to see:
     uint64_t _highest_sent;  //seqno is in bytes
     uint64_t _packets_sent;
-    uint64_t _flow_size;
+    uint64_t _flow_size;   // The amount of data to be sent 
     uint32_t _cwnd;
     uint32_t _maxcwnd;
     uint64_t _last_acked;
     uint32_t _ssthresh;
     uint16_t _dupacks;
-    int32_t _app_limited;
+    int32_t _app_limited;  // Unit: bytes/second
 
     //round trip time estimate, needed for coupled congestion control
-    simtime_picosec _rtt, _rto, _mdev,_base_rtt;
+    simtime_picosec _rtt, _rto, _mdev;
+    //simtime_picosec _base_rtt;
     int _cap;
     simtime_picosec _rtt_avg, _rtt_cum;
     //simtime_picosec when[MAX_SENT];
     int _sawtooth;
 
     uint16_t _mss;
-    uint32_t _unacked; // an estimate of the amount of unacked data WE WANT TO HAVE in the network
+    //uint32_t _unacked; // an estimate of the amount of unacked data WE WANT TO HAVE in the network
     uint32_t _effcwnd; // an estimate of our current transmission rate, expressed as a cwnd
     uint64_t _recoverq;
     bool _in_fast_recovery;
@@ -83,15 +84,18 @@ class XcpSrc : public PacketSink, public EventSource {
     void set_app_limit(int pktps);
 
     const Route* _route;
-    simtime_picosec _last_ping;
+    //simtime_picosec _last_ping;
     void send_packets();
 	
     int _subflow_id;
 
-    virtual void inflate_window();
-    virtual void deflate_window();
+    //virtual void inflate_window();
+    //virtual void deflate_window();
 
  private:
+
+    static const int32_t MAX_THROUGHPUT = INT32_MAX;
+
     const Route* _old_route;
     uint64_t _last_packet_with_old_route;
 
@@ -122,7 +126,7 @@ class XcpSink : public PacketSink, public DataReceiver, public Logged {
     XcpAck::seq_t _cumulative_ack; // the packet we have cumulatively acked
     uint64_t _packets;
     uint32_t _drops;
-    uint64_t cumulative_ack(){ return _cumulative_ack + _received.size()*1000;}
+    uint64_t cumulative_ack(){ return _cumulative_ack + _received.size() * Packet::data_packet_size();}
     uint32_t drops(){ return _src->_drops;}
     uint32_t get_id(){ return id;}
     virtual const string& nodename() { return _nodename; }
@@ -138,7 +142,7 @@ class XcpSink : public PacketSink, public DataReceiver, public Logged {
     const Route* _route;
 
     // Mechanism
-    void send_ack(simtime_picosec ts,bool marked, uint32_t cwnd, uint32_t demand,
+    void send_ack(simtime_picosec ts,bool marked, uint32_t cwnd, int32_t demand,
 		  simtime_picosec rtt);
 
     string _nodename;

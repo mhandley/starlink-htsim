@@ -148,7 +148,7 @@ class TcpSink : public PacketSink, public DataReceiver, public Logged {
     TcpAck::seq_t _cumulative_ack; // the packet we have cumulatively acked
     uint64_t _packets;
     uint32_t _drops;
-    uint64_t cumulative_ack(){ return _cumulative_ack + _received.size()*1000;}
+    uint64_t cumulative_ack(){ return _cumulative_ack + _received.size() * Packet::data_packet_size();}  // This actually returns the total number of bytes the sink has received
     uint32_t drops(){ return _src->_drops;}
     uint32_t get_id(){ return id;}
     virtual const string& nodename() { return _nodename; }
