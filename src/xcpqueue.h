@@ -16,8 +16,8 @@ class XcpQueue : public Queue {
  public:
     XcpQueue(linkspeed_bps bitrate, mem_b maxsize, EventList &eventlist, 
 	     QueueLogger* logger, double utilization_target = 1.0);
-    void receivePacket(Packet& pkt);
-    void completeService();
+    virtual void receivePacket(Packet& pkt);
+    virtual void completeService();
 
  private:
     linkspeed_bps _target_bitrate;    // target link utilization in bits/s

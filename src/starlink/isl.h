@@ -4,7 +4,8 @@
 
 #include "pipe.h"
 #include "node.h"
-#include "queue.h"
+#include "xcpqueue.h"
+#include "logfile.h"
 
 class Link_factory {
  public:
@@ -12,6 +13,7 @@ class Link_factory {
     Link& activate_link(Node& src, Node& dst, linkspeed_bps bitrate,
 			mem_b maxqueuesize);
     void drop_link(Link& link);
+    void dijkstra_up_all_links();
  private:
     EventList& _eventlist;
     int _pool_size;
@@ -28,6 +30,7 @@ class Link_factory {
 // the link length can be recalculated, so the packet arrives at the
 // next sink at the right time.
 
+// Must set _logfile and _queue_logger_sampling_interval before use
 class Link: public Pipe {
     friend class Link_factory;
  public:
@@ -36,18 +39,29 @@ class Link: public Pipe {
     void reassign(Node& src, Node& dst, linkspeed_bps bitrate, mem_b maxqueuesize,
 		  int link_index);
     void going_down();
+    void dijkstra_up();
+    void dijkstra_down();
+    bool is_dijkstra_up() const;
     void receivePacket(Packet& pkt); // inherited from PacketSink
     void doNextEvent(); // inherited from EventSource
-    virtual simtime_picosec delay() const;
+    virtual simtime_picosec delay(simtime_picosec time);
+    simtime_picosec retrieve_delay();
     const Node& src() {return *_src;}
     const Node& dst() {return *_dst;}
-    Queue& queue() {return _queue;}
-    Node& get_neighbour(Node& n);
+    Queue* queue() {return _queue;}
+    Node& get_neighbour(const Node& n);
+    Link* reverse_link() const;
+    void set_reverse_link(Link*);
+
+    static Logfile* _logfile;
+    static simtime_picosec _queue_logger_sampling_interval;
  private:
     Node* _src;
     Node* _dst;
-    Queue _queue;  
+    Queue* _queue;
+    Link* _back_link;
     bool _up;
+    bool _dijkstra_up;
     int _link_index; // used only by Link factory
 };
 

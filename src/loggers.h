@@ -12,6 +12,7 @@
 #include "ndp.h"
 #include "mtcp.h"
 #include "qcn.h"
+#include "mpxcp.h"
 #include <list>
 #include <map>
 
@@ -51,6 +52,12 @@ class XcpLoggerSimple : public XcpLogger {
     static string event_to_str(RawLogEvent& event);
 };
 
+class MultipathXcpLoggerSimple: public MultipathXcpLogger {
+ public:
+    void logMultipathXcp(MultipathXcpSrc& mpxcp, MultipathXcpEvent ev);
+    static string event_to_str(RawLogEvent& event);
+};
+
 class QueueLoggerSimple : public QueueLogger {
  public:
     void logQueue(Queue& queue, QueueEvent ev, Packet& pkt);
@@ -87,24 +94,33 @@ class SinkLoggerSampling : public Logger, public EventSource {
     virtual void doNextEvent();
     void monitorSink(DataReceiver* sink);
     void monitorMultipathSink(DataReceiver* sink);
+    void monitorXcpSink(DataReceiver* sink);
+    void monitorMultipathXcpSink(DataReceiver* sink);
  protected:
     vector<DataReceiver*> _sinks;
+    vector<DataReceiver*> _sinks_xcp;
     vector<uint32_t> _multipath;
+    vector<uint32_t> _multipath_xcp;
 
     vector<uint64_t> _last_seq;
+    vector<uint64_t> _last_seq_xcp;
     vector<uint32_t> _last_sndbuf;
     vector<double> _last_rate;
+    vector<double> _last_rate_xcp;
 
     struct lttime
     {
-	bool operator()(const MultipathTcpSrc* i1, const MultipathTcpSrc* i2) const
+	bool operator()(const Logged* i1, const Logged* i2) const
 	{
 	    return i1->id<i2->id;
 	}
     };
     typedef map<MultipathTcpSrc*,double,lttime> multipath_map;
+    typedef map<MultipathXcpSrc*,double,lttime> multipath_map_xcp;
     multipath_map _multipath_src;
     multipath_map _multipath_seq;
+    multipath_map_xcp _multipath_src_xcp;
+    multipath_map_xcp _multipath_seq_xcp;
 	
     simtime_picosec _last_time;
     simtime_picosec _period;
@@ -138,7 +154,9 @@ class MemoryLoggerSampling : public Logger, public EventSource {
     void monitorTcpSink(TcpSink* sink);
     void monitorTcpSource(TcpSrc* sink);
     void monitorMultipathTcpSink(MultipathTcpSink* sink);
-    void monitorMultipathTcpSource(MultipathTcpSrc* sink);
+    void monitorMultipathTcpSource(MultipathTcpSrc* src);
+    void monitorMultipathXcpSink(MultipathXcpSink* sink);
+    void monitorMultipathXcpSource(MultipathXcpSrc* src);
     static string event_to_str(RawLogEvent& event);
  private:
     vector<TcpSink*> _tcp_sinks;

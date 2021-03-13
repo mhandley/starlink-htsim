@@ -1,6 +1,9 @@
 // -*- c-basic-offset: 4; tab-width: 8; indent-tabs-mode: t -*-                                                                                                               
 #include "isl.h"
+#include "loggers.h"
 
+Logfile* Link::_logfile = NULL;
+simtime_picosec Link::_queue_logger_sampling_interval = timeFromMs(10);
 
 // Links go up and down pretty regularly, but the number stays pretty
 // constant.  Rather than create and free them, we use a factory and
@@ -56,16 +59,26 @@ void Link_factory::drop_link(Link& link) {
     link.going_down();
 }
 
+void Link_factory::dijkstra_up_all_links() {
+    for (int i = 0 ; i < _active_link_count ; ++i) {
+        _active_links[i]->dijkstra_up();
+    }
+}
+
 
 Link::Link(Node& src, Node& dst, linkspeed_bps bitrate, mem_b maxqueuesize,
 	   int link_index, EventList& eventlist) :
     Pipe(0, eventlist), _src(&src), _dst(&dst),
-    _queue(bitrate, maxqueuesize, eventlist, NULL),  _link_index(link_index)
+    _queue(NULL),  _link_index(link_index)
 {
     stringstream ss;
-    ss << "link(" << delay()/1000000 << "us)";
+    ss << "link(" << delay(0)/1000000 << "us)";
     _nodename = ss.str();
     _up = true;
+    _dijkstra_up = true;
+    QueueLoggerSampling* queue_logger = new QueueLoggerSampling(_queue_logger_sampling_interval, eventlist);
+    _logfile->addLogger(*queue_logger);
+    _queue = new XcpQueue(bitrate, maxqueuesize, eventlist, queue_logger);
 }
 
 void Link::reassign(Node& src, Node& dst, linkspeed_bps bitrate,
@@ -77,19 +90,33 @@ void Link::reassign(Node& src, Node& dst, linkspeed_bps bitrate,
     _dst = &dst;
     _link_index = link_index;
     _up = true;
-    _queue.set_bitrate(bitrate);
-    _queue.set_bufsize(maxqueuesize);
+    _dijkstra_up = true;
+    _back_link = NULL;
+    _queue->set_bitrate(bitrate);
+    _queue->set_bufsize(maxqueuesize);
 }
 
 void Link::going_down() {
     _up = false;
-    _queue.drop_all(); // drops packets from queue
+    _queue->drop_all(); // drops packets from queue
     // XXX need to drop the packets in flight...
+}
+
+void Link::dijkstra_up() {
+    _dijkstra_up = true;
+}
+
+void Link::dijkstra_down() {
+    _dijkstra_up = false;
+}
+
+bool Link::is_dijkstra_up() const {
+    return _dijkstra_up;
 }
 
 void Link::receivePacket(Packet& pkt) {
     //cout << "link at " << timeAsMs(eventlist().now()) << "ms" << endl;
-    set_delay(delay());
+    set_delay(delay(eventlist().now()));
     simtime_picosec now = eventlist().now();
     double dist = _src->distance(*_dst, now);
     simtime_picosec delay = Pipe::delay();
@@ -101,13 +128,18 @@ void Link::doNextEvent() {
     Pipe::doNextEvent();
 }
 
-simtime_picosec Link::delay() const {
-    double dist = _src->distance(*_dst, eventlist().now());
+simtime_picosec Link::delay(simtime_picosec time) {
+    double dist = _src->distance(*_dst, time);
     simtime_picosec delay = timeFromDistVacuum(dist);
+    Pipe::set_delay(delay);
     return delay;
 }
 
-Node& Link::get_neighbour(Node& n) {
+simtime_picosec Link::retrieve_delay() {
+    return Pipe::delay();
+}
+
+Node& Link::get_neighbour(const Node& n) {
     if (&n == _src) {
 	return *_dst;
     }
@@ -117,3 +149,10 @@ Node& Link::get_neighbour(Node& n) {
     abort();
 }
 
+Link* Link::reverse_link() const {
+    return _back_link;
+}
+
+void Link::set_reverse_link(Link* link) {
+    _back_link = link;
+}

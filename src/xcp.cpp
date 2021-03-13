@@ -8,6 +8,8 @@
 //  XCP SOURCE
 ////////////////////////////////////////////////////////////////
 
+simtime_picosec XcpSrc::MIN_CTL_PACKET_TIMEOUT = timeFromMs(100);
+
 XcpSrc::XcpSrc(XcpLogger* logger, TrafficLogger* pktlogger, 
 	       EventList &eventlist)
     : EventSource(eventlist,"xcp"),  _logger(logger), _flow(pktlogger)
@@ -55,6 +57,9 @@ XcpSrc::XcpSrc(XcpLogger* logger, TrafficLogger* pktlogger,
     _RFC2988_RTO_timeout = timeInf;
 
     _nodename = "xcpsrc";
+
+	_ctl_packet_timeout = eventlist.now() + MIN_CTL_PACKET_TIMEOUT;
+	eventlist.sourceIsPendingRel(*this,MIN_CTL_PACKET_TIMEOUT);
 }
 
 #ifdef PACKET_SCATTER
@@ -78,7 +83,7 @@ void XcpSrc::set_app_limit(int pktps) {
 		_cwnd = _mss;
     }
     _ssthresh = 0xffffffff;
-    _app_limited = pktps * Packet::data_packet_size();
+    _app_limited = static_cast<linkspeed_bps>(pktps) * static_cast<linkspeed_bps>(Packet::data_packet_size()) * static_cast<linkspeed_bps>(8);
     send_packets();
 }
 
@@ -104,6 +109,20 @@ void XcpSrc::replace_route(const Route* newroute) {
     //  Printf("Wiating for ack %d to delete\n",_last_packet_with_old_route);
 }
 
+linkspeed_bps XcpSrc::throughput() const {
+	linkspeed_bps ans = _cwnd * 8;
+	ans /= timeAsSec(_rtt);
+
+	return ans;
+}
+
+linkspeed_bps XcpSrc::route_spare_throughput() const {
+	if (_route_spare_throughput < 0) {
+		return 0;
+	}
+	return _route_spare_throughput;
+}
+
 void 
 XcpSrc::connect(const Route& routeout, const Route& routeback, XcpSink& sink, 
 		simtime_picosec starttime) {
@@ -122,6 +141,35 @@ XcpSrc::connect(const Route& routeout, const Route& routeback, XcpSink& sink,
 void
 XcpSrc::receivePacket(Packet& pkt) 
 {
+	if (pkt.type() == XCPCTLACK) {
+		XcpCtlAck* p = dynamic_cast<XcpCtlAck*>(&pkt);
+		_route_spare_throughput = p->allowed_throughput();
+
+		// Maybe we can update rtt also using control packet
+		//compute rtt
+    	uint64_t m = eventlist().now()-p->ts_echo();
+
+    	if (m!=0){
+        	if (_rtt>0){
+            	uint64_t abs;
+            	if (m>_rtt)
+                    abs = m - _rtt;
+            	else
+                	abs = _rtt - m;
+
+            	_mdev = 3 * _mdev / 4 + abs/4;
+            	_rtt = 7*_rtt/8 + m/8;
+            	_rto = _rtt + 4*_mdev;
+        	} else {
+            	_rtt = m;
+            	_mdev = m/2;
+            	_rto = _rtt + 4*_mdev;
+        	}
+    	}
+
+		return;
+	}
+
     simtime_picosec ts_echo;
     XcpAck *p = (XcpAck*)(&pkt);
     XcpAck::seq_t seqno = p->ackno();
@@ -374,6 +422,7 @@ This is TCP implementation
 // Note: the data sequence number is the number of Byte1 of the packet, not the last byte.
 void 
 XcpSrc::send_packets() {
+	cout << "FUCK ENTER HERE" << endl;
     int c = _cwnd;
 
 	int32_t demand = MAX_THROUGHPUT;
@@ -393,7 +442,7 @@ XcpSrc::send_packets() {
     }
 
     if (_app_limited >= 0 && _rtt > 0) {
-		uint64_t d = (uint64_t)_app_limited * _rtt / timeFromSec(1);
+		uint64_t d = (uint64_t)_app_limited * _rtt / timeFromSec(1) / 8;
 		if (c > d) {
 			c = d;
 		}
@@ -498,6 +547,18 @@ void XcpSrc::rtx_timer_hook(simtime_picosec now, simtime_picosec period) {
 }
 
 void XcpSrc::doNextEvent() {
+	if (_ctl_packet_timeout <= eventlist().now()) {
+		Packet* p = XcpCtlPacket::newpkt(_flow, *_route);
+		p->sendOn();
+
+		simtime_picosec timeout = _rtt;
+		if (timeout < MIN_CTL_PACKET_TIMEOUT) {
+			timeout = MIN_CTL_PACKET_TIMEOUT;
+		}
+		_ctl_packet_timeout = eventlist().now() + timeout;
+		eventlist().sourceIsPendingRel(*this,timeout);
+		return;
+	}
     if(_rtx_timeout_pending) {
 		_rtx_timeout_pending = false;
 
@@ -561,6 +622,16 @@ XcpSink::connect(XcpSrc& src, const Route& route) {
 // seqno is the first byte of the new packet.
 void
 XcpSink::receivePacket(Packet& pkt) {
+	if (pkt.type() == XCPCTL) {
+		XcpCtlPacket* p = dynamic_cast<XcpCtlPacket*>(&pkt);
+		XcpCtlAck* ack = XcpCtlAck::newpkt(_src->_flow, *_route, p->throughput());
+		ack->flow().logTraffic(*ack,*this,TrafficLogger::PKT_CREATESEND);
+		ack->set_ts_echo(p->ts());
+		ack->sendOn();
+		p->free();
+		return;
+	}
+
     XcpPacket *p = (XcpPacket*)(&pkt);
     XcpPacket::seq_t seqno = p->seqno();
     simtime_picosec ts = p->ts();
@@ -650,6 +721,17 @@ XcpRtxTimerScanner::XcpRtxTimerScanner(simtime_picosec scanPeriod, EventList& ev
 void 
 XcpRtxTimerScanner::registerXcp(XcpSrc &xcpsrc) {
     _xcps.push_back(&xcpsrc);
+}
+
+void
+XcpRtxTimerScanner::unregisterXcp(XcpSrc &xcpsrc) {
+	for (auto it = _xcps.begin() ; it != _xcps.end() ; ++it) {
+		if (*it == &xcpsrc) {
+			auto it_temp = it;
+			--it;
+			_xcps.erase(it_temp);
+		}
+	}
 }
 
 void XcpRtxTimerScanner::doNextEvent() {

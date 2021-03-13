@@ -21,7 +21,7 @@ public:
 				    uint32_t cwnd, int32_t demand, simtime_picosec rtt) {
 	XcpPacket* p = _packetdb.allocPacket();
 	p->set_route(flow,route,size,seqno+size-1); // The TCP sequence number is the first byte of the packet; I will ID the packet by its last byte.
-	p->_type = TCP;
+	p->_type = XCP;
 	p->_seqno = seqno;
 	p->_syn = false;
 	p->_rtt = rtt;
@@ -91,6 +91,58 @@ protected:
     uint32_t _cwnd_echo;  // echoed so we know what we sent with the data packet
     int32_t _allowed_demand;
     static PacketDB<XcpAck> _packetdb;
+};
+
+class XcpCtlPacket : public Packet {
+public:
+    typedef uint64_t seq_t;
+
+    inline static XcpCtlPacket* newpkt(PacketFlow &flow, const Route &route) {
+	XcpCtlPacket* p = _packetdb.allocPacket();
+	p->set_route(flow,route,CTLSIZE,(uintptr_t)p); // The TCP sequence number is the first byte of the packet; I will ID the packet by its last byte.
+	p->_type = XCPCTL;
+	p->_free_throughput = INT32_MAX;  // Bytes
+	return p;
+    }
+
+    void free() {_packetdb.freePacket(this);}
+    virtual ~XcpCtlPacket(){}
+    inline simtime_picosec ts() const {return _ts;}
+    inline void set_ts(simtime_picosec ts) {_ts = ts;}
+    inline int32_t throughput() const {return _free_throughput;}
+    inline void set_throughput(int32_t throughput)  {_free_throughput = throughput;}
+
+    static const int CTLSIZE = 40;
+protected:
+    simtime_picosec _ts;
+    int32_t _free_throughput;
+    static PacketDB<XcpCtlPacket> _packetdb;
+};
+
+
+class XcpCtlAck : public Packet {
+public:
+    typedef XcpCtlPacket::seq_t seq_t;
+
+    inline static XcpCtlAck* newpkt(PacketFlow &flow, const Route &route, int32_t throughput) {
+	XcpCtlAck* p = _packetdb.allocPacket();
+	p->set_route(flow,route,ACKSIZE,(uintptr_t)p);
+	p->_type = XCPCTLACK;
+	p->_allowed_throughput = throughput;
+	return p;
+    }
+
+    void free() {_packetdb.freePacket(this);}
+    inline simtime_picosec ts_echo() const {return _ts_echo;}
+    inline void set_ts_echo(simtime_picosec ts) {_ts_echo = ts;}
+    inline int32_t allowed_throughput() const {return _allowed_throughput;}
+
+    virtual ~XcpCtlAck(){}
+    const static int ACKSIZE=40;
+protected:
+    simtime_picosec _ts_echo;
+    int32_t _allowed_throughput;
+    static PacketDB<XcpCtlAck> _packetdb;
 };
 
 #endif

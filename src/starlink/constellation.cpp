@@ -110,13 +110,17 @@ Constellation::Constellation(EventList& eventlist,
 }
 
 void
-Constellation::dijkstra(City& src, City& dst) {
+Constellation::dijkstra(City& src, City& dst, simtime_picosec time) {
     assert(heap.size() == 0);
+	src.update_uplinks(time);
+    dst.update_uplinks(time);
     _route_src = &src;
     heap.insert(src);
     for (int sat=0; sat < _num_sats; sat++) {
-	heap.insert_at_infinity(*_sats[sat]);
+		_sats[sat]->clear_routing();
+		heap.insert_at_infinity(*_sats[sat]);
     }
+	dst.clear_routing();
     heap.insert_at_infinity(dst);
     src.set_dist(0);
     while (heap.size() > 0) {
@@ -124,21 +128,44 @@ Constellation::dijkstra(City& src, City& dst) {
 	//for (int i = 0; i < u.link_count(); i++) {
 	unordered_set<Link*>::iterator i;;
 	for (i = u._links.begin(); i != u._links.end(); i++) {
-	    Link& l = *(*i);
-	    Node& n = l.get_neighbour(u);
-	    simtime_picosec dist = n.dist();
-	    simtime_picosec linkdelay = l.delay();
-	    //cout << "ps2:" << linkdelay << endl;
-	    simtime_picosec newdist = u.dist() + linkdelay;
-	    //cout << "newdist:" << newdist << endl;
-	    if (newdist < dist) {
-		//cout << "newdist2:" << newdist << " was " << dist << endl;
-		n.set_dist(newdist);
-		n.set_parent(u, l);
-		heap.decrease_distance(n, newdist);
-	    }
+		if ((*i)->is_dijkstra_up()) {
+			Link& l = *(*i);
+			Node& n = l.get_neighbour(u);
+			simtime_picosec dist = n.dist();
+			simtime_picosec linkdelay = l.delay(time);
+			//cout << "ps2:" << linkdelay << endl;
+			simtime_picosec newdist = u.dist() + linkdelay;
+			//cout << "newdist:" << newdist << endl;
+			if (newdist < dist) {
+			//cout << "newdist2:" << newdist << " was " << dist << endl;
+			n.set_dist(newdist);
+			n.set_parent(u, l);
+			heap.decrease_distance(n, newdist);
+			}
+		}
 	}
     }
+}
+
+void Constellation::dijkstra_down_links_in_route(Route* route) {
+	for (auto it = route->begin() ; it != route->end() ; ++it) {
+		Link* link = dynamic_cast<Link*>(*it);
+		if (link != NULL) {
+			link->dijkstra_down();
+		}
+	}
+}
+
+simtime_picosec Constellation::get_rtt(Route* route) {
+	simtime_picosec rtt = 0;
+	for (auto it = route->begin() ; it != route->end() ; ++it) {
+		Link* link = dynamic_cast<Link*>(*it);
+		if (link != NULL) {
+			rtt += link->retrieve_delay();
+		}
+	}
+
+	return rtt * 2;
 }
 
 
@@ -154,7 +181,7 @@ Constellation::find_route(City& dst) {
 	    //cout << l->nodename() << " " << this << endl;
 	    route->push_front(static_cast<PacketSink*>(l));
 	    //cout << l->queue().nodename() << " " << this << endl;
-	    route->push_front(static_cast<PacketSink*>(&(l->queue())));
+	    route->push_front(static_cast<PacketSink*>(l->queue()));
 	    hop++;
 	}
 	n = n->parent();
@@ -173,5 +200,14 @@ Constellation::find_route(City& dst) {
     }
     */
 
+    if (&dynamic_cast<Link*>(*(++(route->begin())))->src() != _route_src) {
+		delete route;
+		return NULL;
+	}
+
     return route;
+}
+
+void Constellation::dijkstra_up_all_links() {
+	_link_factory.dijkstra_up_all_links();
 }

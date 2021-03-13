@@ -44,6 +44,9 @@ class XcpSrc : public PacketSink, public EventSource {
 
     void set_ssthresh(uint64_t s){_ssthresh = s;}
 
+    linkspeed_bps throughput() const;
+    linkspeed_bps route_spare_throughput() const;
+
     //uint32_t effective_window();
     virtual void rtx_timer_hook(simtime_picosec now,simtime_picosec period);
     virtual const string& nodename() { return _nodename; }
@@ -57,7 +60,9 @@ class XcpSrc : public PacketSink, public EventSource {
     uint64_t _last_acked;
     uint32_t _ssthresh;
     uint16_t _dupacks;
-    int32_t _app_limited;  // Unit: bytes/second
+    linkspeed_bps _app_limited;  // Unit: bits/second
+
+    int64_t _route_spare_throughput;
 
     //round trip time estimate, needed for coupled congestion control
     simtime_picosec _rtt, _rto, _mdev;
@@ -80,6 +85,9 @@ class XcpSrc : public PacketSink, public EventSource {
     XcpSink* _sink;
     simtime_picosec _RFC2988_RTO_timeout;
     bool _rtx_timeout_pending;
+
+    static simtime_picosec MIN_CTL_PACKET_TIMEOUT;
+    simtime_picosec _ctl_packet_timeout;
 
     void set_app_limit(int pktps);
 
@@ -134,12 +142,12 @@ class XcpSink : public PacketSink, public DataReceiver, public Logged {
     list<XcpAck::seq_t> _received; /* list of packets above a hole, that 
 				      we've received */
     XcpSrc* _src;
+    const Route* _route;
  private:
     // Connectivity
     uint16_t _crt_path;
 
     void connect(XcpSrc& src, const Route& route);
-    const Route* _route;
 
     // Mechanism
     void send_ack(simtime_picosec ts,bool marked, uint32_t cwnd, int32_t demand,
@@ -153,6 +161,7 @@ class XcpRtxTimerScanner : public EventSource {
     XcpRtxTimerScanner(simtime_picosec scanPeriod, EventList& eventlist);
     void doNextEvent();
     void registerXcp(XcpSrc &xcpsrc);
+    void unregisterXcp(XcpSrc &xcpsrc);
  private:
     simtime_picosec _scanPeriod;
     typedef list<XcpSrc*> xcps_t;

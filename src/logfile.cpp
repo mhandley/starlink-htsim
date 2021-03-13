@@ -46,6 +46,15 @@ Logfile::addLogger(Logger& logger) {
     _loggers.push_back(&logger);
 }
 
+void
+Logfile::removeLogger(Logger& logger) {
+    for (size_t i = 0 ; i < _loggers.size() ; ++i) {
+        if (_loggers[i] == &logger) {
+            _loggers[i] = NULL;
+        }
+    }
+}
+
 
 void 
 Logfile::write(const string& msg) {

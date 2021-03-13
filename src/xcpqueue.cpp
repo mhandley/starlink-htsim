@@ -48,7 +48,7 @@ XcpQueue::receivePacket(Packet& pkt)
 
     cout << _nodename << " receiving packet" << endl;
 
-	if (_mean_rtt == 0) {
+	if (_mean_rtt == 0 && pkt.type() == XCP) {
         XcpPacket* packet = dynamic_cast<XcpPacket*>(&pkt);
         if (packet) {
             _mean_rtt = packet->rtt();
@@ -126,8 +126,9 @@ XcpQueue::receivePacket(Packet& pkt)
 	_bytes_forwarded += pkt.size();
     _data_packets_forwarded++;
 
-    XcpAck* ack_pkt = dynamic_cast<XcpAck*>(&pkt);
-    if (!ack_pkt) {
+    cout << pkt.type() << " TYPE " << XCP << " TYPE " << XCPCTL << endl;
+
+    if (pkt.type() == XCP) {
         XcpPacket* xcp_pkt = static_cast<XcpPacket*>(&pkt);
         simtime_picosec rtt = xcp_pkt->rtt();
         uint16_t psize = pkt.size();
@@ -177,6 +178,14 @@ XcpQueue::receivePacket(Packet& pkt)
 		}
 
         cout << "Queuesize: " << queuesize() << " My NAME: " << _nodename << " Feedback: " << xcp_pkt->demand() << " Seqno: " << xcp_pkt->seqno() << " Next Hop: " << xcp_pkt->nexthop() << endl;
+    }
+
+    if (pkt.type() == XCPCTL) {
+        XcpCtlPacket* p = dynamic_cast<XcpCtlPacket*>(&pkt);
+        int32_t free_throughput = _target_bitrate - _mean_bitrate;
+        if (free_throughput < p->throughput()) {
+            p->set_throughput(free_throughput);
+        }
     }
 
 	if (crt > _maxsize) {

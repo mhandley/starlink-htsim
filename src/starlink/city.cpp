@@ -32,6 +32,14 @@ City::City(double latitude, double longitude, Constellation& constellation)
     add_uplinks(_constellation.sats(), _constellation.num_sats(), 0);
 }
 
+Logged* City::logged() const {
+	return _logged;
+}
+
+void City::set_logged(Logged* logged) {
+	_logged = logged;
+}
+
 void City::update_coordinates(simtime_picosec time) {
     // To calculate city coordinates, place city on x-axis, rotate by
     // latitude around y-axis, then rotate by longitude + time*speed
@@ -192,9 +200,7 @@ void City::update_uplinks(simtime_picosec time) {
 
 Route* City::find_route(City& dst, simtime_picosec time) {
     Route* rt = NULL;
-    update_uplinks(time);
-    dst.update_uplinks(time);
-    _constellation.dijkstra(*this, dst);
+    _constellation.dijkstra(*this, dst, time);
     rt = _constellation.find_route(dst);
     rt->use_refcount();
     return rt;

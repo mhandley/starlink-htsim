@@ -500,10 +500,36 @@ string MultipathTcpLoggerSimple::event_to_str(RawLogEvent& event) {
     return ss.str();
 }
 
+void MultipathXcpLoggerSimple::logMultipathXcp(MultipathXcpSrc& mpxcp, MultipathXcpEvent ev) {
+	if (ev == MultipathXcpLogger::UPDATE_TIMEOUT) {
+		_logfile->writeRecord(MultipathXcpLogger::MPXCP, mpxcp.get_id(), ev, mpxcp._total_throughput, mpxcp.update_total_throughput(), 0);
+	}
+}
+
+string MultipathXcpLoggerSimple::event_to_str(RawLogEvent& event) {
+    stringstream ss;
+    ss << fixed << setprecision(9) << event._time;
+    ss << " Type MPXCP ID " << event._id;
+    switch(event._ev) {
+    case MultipathXcpLogger::UPDATE_TIMEOUT:
+	ss << " Ev UPDATE_TIMEOUT" << " ID " << event._id 
+	   << " Old_throughput " << event._val1 << " New_throughput " << event._val2;
+	break;
+	case MultipathXcpLogger::RATE:
+	ss << " Ev RATE" << " ID " << event._id << " Src_throughput " << event._val1 << " Sink_throughput " << event._val2;
+	break;
+    default:
+	ss << " Unknown event: " << event._ev;
+    }
+    return ss.str();
+}
+
 vector<TcpSink*> _tcp_sinks;
 vector<MultipathTcpSink*> _mtcp_sinks;
+vector<MultipathXcpSink*> _mpxcp_sinks;
 vector<TcpSrc*> _tcp_sources;
-vector<TcpSink*> _mtcp_sources;
+vector<MultipathTcpSrc*> _mtcp_sources;
+vector<MultipathXcpSrc*> _mpxcp_sources;
 
 MemoryLoggerSampling::MemoryLoggerSampling(simtime_picosec period, 
 					   EventList& eventlist):
@@ -520,12 +546,20 @@ void MemoryLoggerSampling::monitorMultipathTcpSink(MultipathTcpSink* sink){
     _mtcp_sinks.push_back(sink);
 }
 
+void MemoryLoggerSampling::monitorMultipathXcpSink(MultipathXcpSink* sink) {
+    _mpxcp_sinks.push_back(sink);
+}
+
 void MemoryLoggerSampling::monitorTcpSource(TcpSrc* src){
     _tcp_sources.push_back(src);
 }
 
 void MemoryLoggerSampling::monitorMultipathTcpSource(MultipathTcpSrc* src){
     _mtcp_sources.push_back(src);
+}
+
+void MemoryLoggerSampling::monitorMultipathXcpSource(MultipathXcpSrc* src) {
+	_mpxcp_sources.push_back(src);
 }
 
 void MemoryLoggerSampling::doNextEvent(){
@@ -621,6 +655,24 @@ void SinkLoggerSampling::monitorSink(DataReceiver* sink){
     _multipath.push_back(0);
 }
 
+void SinkLoggerSampling::monitorMultipathXcpSink(DataReceiver* sink) {
+	_sinks_xcp.push_back(sink);
+	_last_seq_xcp.push_back(sink->cumulative_ack());
+	_last_rate_xcp.push_back(0);
+	_multipath_xcp.push_back(1);
+
+	_multipath_seq_xcp[dynamic_cast<MultipathXcpSrc*>(sink)] = 0;
+	_multipath_src_xcp[dynamic_cast<MultipathXcpSrc*>(sink)] = 0;
+}
+
+void SinkLoggerSampling::monitorXcpSink(DataReceiver* sink){
+    _sinks_xcp.push_back(sink);
+    _last_seq_xcp.push_back(sink->cumulative_ack());
+    //_last_sndbuf.push_back(sink->sndbuf());
+    _last_rate_xcp.push_back(0);
+    _multipath_xcp.push_back(0);
+}
+
 void SinkLoggerSampling::doNextEvent(){
     cout << "SinkLoggerSampling::doNextEvent\n";
     eventlist().sourceIsPendingRel(*this,_period);  
@@ -682,6 +734,46 @@ void SinkLoggerSampling::doNextEvent(){
 			      throughput);
 
 	_multipath_src[mtcp] = 0;
+    }
+
+	for (uint64_t i = 0; i<_sinks_xcp.size(); i++){
+		if (_multipath_xcp[i]) {
+			continue;
+		}
+		cout << i << endl;
+		if (_last_seq_xcp[i] <= _sinks_xcp[i]->cumulative_ack()) {
+	    	//this deals with resets for periodic sources
+	    	deltaB = _sinks_xcp[i]->cumulative_ack() - _last_seq_xcp[i];
+	    	//deltaSnd = _sinks[i]->sndbuf() - _last_sndbuf[i];
+	    	if (delta > 0)
+				rate = deltaB * timeFromSec(1) / delta;//Bps
+	    	else 
+				rate = 0;
+	    	_logfile->writeRecord(_sink_type, _sinks_xcp[i]->get_id(),
+				  _event_type, _sinks_xcp[i]->cumulative_ack(), 
+				  0, rate);
+
+	    	_last_rate_xcp[i] = rate;
+		}
+		_last_seq_xcp[i] = _sinks_xcp[i]->cumulative_ack();
+		cout << "cum ack: " << _last_seq_xcp[i] << endl;
+		//_last_sndbuf[i] = _sinks[i]->sndbuf();
+    }
+
+	for (auto it = _multipath_src_xcp.begin(); it!=_multipath_src_xcp.end(); ++it) {
+		MultipathXcpSrc* mpxcp = it->first;
+		it->second = mpxcp->_total_throughput;
+		double throughput = it->second;
+		double goodput = it->second;
+
+		if (mpxcp->_sink){
+	    	deltaB = mpxcp->_sink->cumulative_ack() - (uint64_t)_multipath_seq_xcp[mpxcp];
+	    	goodput = deltaB * timeFromSec(1) / delta;//Bps
+	    	_multipath_seq_xcp[mpxcp] = mpxcp->_sink->cumulative_ack();
+		}
+
+		_logfile->writeRecord(Logger::MPXCP, mpxcp->id,
+			      MultipathXcpLogger::RATE, throughput, goodput, 0);
     }
 }
 
