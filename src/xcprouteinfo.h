@@ -1,6 +1,7 @@
 #ifndef XCPROUTEINFO_H
 #define XCPROUTEINFO_H
 
+#include <iostream>
 #include "config.h"
 #include "route.h"
 
@@ -16,5 +17,7 @@ public:
     simtime_picosec _rtt;
     mutable Route* _route;
 };
+
+std::ostream& operator<< (std::ostream& os, const XcpRouteInfo& obj);
 
 #endif

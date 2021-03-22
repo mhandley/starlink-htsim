@@ -18,6 +18,10 @@ Route::add_endpoints(PacketSink *src, PacketSink* dst) {
     }
 }
 
+bool Route::is_using_refcount() const {
+    return _refcount == REFCOUNT_UNUSED;
+}
+
 // refcount functions are const, but actually modify refcount.  This
 // is ugly, but avoids the need to use external reference-counted
 // pointers.
@@ -41,11 +45,12 @@ Route::decr_refcount() const {
     //cout << this << "decr_refcount" << endl;
     assert(_refcount < 1000);
     if (_refcount != REFCOUNT_UNUSED) {
+        cout << "DECREASING REFCOUNT" << endl;
 	assert(_refcount > 0);
 	_refcount--;
 	//cout << this << "decr_refcount, now " << _refcount << endl;
 	if (_refcount == 0) {
-	    //cout << "FREEING ROUTE" << endl;
+	    cout << "FREEING ROUTE" << endl;
 	    delete(this);
 	    return;
 	}

@@ -3,6 +3,7 @@
 #include <iostream>
 #include "xcpqueue.h"
 #include "xcppacket.h"
+#include "xcp.h"
 
 #define eps 1e-6
 
@@ -46,7 +47,7 @@ XcpQueue::receivePacket(Packet& pkt)
     int crt = _queuesize + pkt.size();
     simtime_picosec now = eventlist().now();
 
-    cout << _nodename << " receiving packet" << endl;
+    cout << _nodename << " Address: " << this << " receiving packet" << endl;
 
 	if (_mean_rtt == 0 && pkt.type() == XCP) {
         XcpPacket* packet = dynamic_cast<XcpPacket*>(&pkt);
@@ -58,7 +59,7 @@ XcpQueue::receivePacket(Packet& pkt)
 
     if (now - _last_update > _control_interval) {
         update_persistent_queue_size();
-        cout << _nodename << "recalculating stats, now " << timeAsMs(now) << "\n";
+        cout << _nodename << " Address: " << this << " recalculating stats, now " << timeAsMs(now) << "\n";
         cout << "td: " << timeAsMs(now - _last_update) << " ci: " << timeAsMs(_control_interval) << endl;
         // time to calculate stats
 		// if (_mean_rtt == 0) {
@@ -150,34 +151,36 @@ XcpQueue::receivePacket(Packet& pkt)
         float p_i = _epsilon_p * timeAsSec(rtt) * timeAsSec(rtt) * psize / cwnd;
         // n_i is negative per packet feedback
         float n_i = _epsilon_n * timeAsSec(rtt) * psize;
-        int32_t h_feedback = p_i - n_i;
+        int32_t h_feedback = p_i - n_i + 0.5;
         cout << timeAsMs(now) << " p_i " << p_i << " n_i " << n_i << endl;
         cout << timeAsMs(now) << " h_fb " << h_feedback << endl;
         if (demand > h_feedback) {
             xcp_pkt->set_demand(h_feedback);
         } else {
 			p_i = demand + n_i;
-			n_i = (_residue_neg_feedback < n_i + h_feedback - demand ? _residue_neg_feedback : n_i + h_feedback);
+			n_i = (_residue_neg_feedback < n_i + h_feedback - demand ? _residue_neg_feedback : n_i + h_feedback - demand);
 		}
 
 		_residue_pos_feedback -= p_i;
 		_residue_neg_feedback -= n_i;
-
+/*
 		if (_residue_pos_feedback < 0) {
 			_residue_pos_feedback = 0;
 		}
 		if (_residue_neg_feedback < 0) {
 			_residue_neg_feedback = 0;
 		}
-
+*/
 		if (_residue_pos_feedback <= 0) {
+            _residue_pos_feedback = 0;
 			_epsilon_p = 0;
 		}
 		if (_residue_neg_feedback <= 0) {
+            _residue_neg_feedback = 0;
 			_epsilon_n = 0;
 		}
 
-        cout << "Queuesize: " << queuesize() << " My NAME: " << _nodename << " Feedback: " << xcp_pkt->demand() << " Seqno: " << xcp_pkt->seqno() << " Next Hop: " << xcp_pkt->nexthop() << endl;
+        cout << "Queuesize: " << queuesize() << " My NAME: " << _nodename << " Address: " << this << " Destination: " << dynamic_cast<XcpSink*>(*(--(pkt.route()->end())))->str() << " Feedback: " << xcp_pkt->demand() << " Seqno: " << xcp_pkt->seqno() << " Next Hop: " << xcp_pkt->nexthop() << endl;
     }
 
     if (pkt.type() == XCPCTL) {

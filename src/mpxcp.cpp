@@ -9,7 +9,7 @@
 ////////////////////////////////////////////////////////////////
 
 const int32_t MultipathXcpSrc::MAX_THROUGHPUT = INT32_MAX;
-const simtime_picosec MultipathXcpSrc::MIN_ROUTE_UPDATE_INTERVAL = 100000000000;
+const simtime_picosec MultipathXcpSrc::MIN_ROUTE_UPDATE_INTERVAL = 10000000000;
 
 XcpNetworkTopology* MultipathXcpSrc::_network_topology = NULL;
 Logfile* MultipathXcpSrc::_logfile = NULL;
@@ -20,7 +20,7 @@ MultipathXcpSrc::MultipathXcpSrc(MultipathXcpLogger* logger, TrafficLogger* pktl
 {
     _total_throughput = 0;
     _flow_size = static_cast<uint64_t>(-1);
-    _app_limited = static_cast<linkspeed_bps>(-1);
+    _app_limited = INT64_MAX;
     _flow_started = false;
     _route_update_interval = MIN_ROUTE_UPDATE_INTERVAL;
     _active_routes = 0;
@@ -44,11 +44,11 @@ void MultipathXcpSrc::startflow() {
 
     update_subflow_list(start_subflow_size);
     adjust_subflow_throughput();
-
+/* Set app_limit in adjust_subflow_throughput handles this
     for (auto src : _subflows) {
         src.second->startflow();
     }
-
+*/
     _flow_started = true;
 }
 
@@ -61,7 +61,16 @@ void MultipathXcpSrc::receivePacket(Packet& pkt) {
 
 }
 
+void MultipathXcpSrc::set_start_time(simtime_picosec time) {
+    eventlist().sourceIsPending(*this,time);
+}
+
+void MultipathXcpSrc::set_sink(MultipathXcpSink* sink) {
+    _sink = sink;
+}
+
 void MultipathXcpSrc::doNextEvent() {
+    cout << "MPXCP DONEXTEVENT" << endl;
 
     if(_flow_started) {
         collect_garbage();
@@ -78,30 +87,53 @@ void MultipathXcpSrc::doNextEvent() {
 }
 
 void MultipathXcpSrc::update_subflow_list(size_t number_of_paths) {
+    cout << "Updating Subflow List" << nodename() << endl;
     if (!_network_topology->changed() && number_of_paths < _subflows.size()) {
         return;
     } else {
-        map<XcpRouteInfo,XcpSrc*> old_subflows = _subflows;
+        map<XcpRouteInfo,XcpSrc*> old_subflows = std::move(_subflows);
         _subflows = _network_topology->get_paths(this,_sink, number_of_paths);
+
+        cout << "GET PATH SUCCESSFUL" << endl;
+
+        cout << "OLD PATHS: " << endl;
+        for (auto flow : old_subflows) {
+            cout << flow.first << endl;
+        }
+
+        cout << "NEW PATHS: " << endl;
+        for (auto flow : _subflows) {
+            cout << flow.first << endl;
+        }
 
         for (auto src_it = _subflows.begin() ; src_it != _subflows.end() ; ++src_it) {
             //TODO
             auto it = old_subflows.find(src_it->first);
             if (it != old_subflows.end()) {
+                cout << "FOUND IN OLD SUBFLOW" << endl;
                 _subflows[src_it->first] = it->second;
                 src_it->first.set_route(it->first.route());
                 old_subflows.erase(it);
             } else {
                 // New route.
+                cout << "NEW XCPSRC" << endl;
                 XcpSrc* new_src = create_new_src();
                 Route* new_route_out = const_cast<Route*>(_network_topology->get_route_from_info(src_it->first));
                 Route* new_route_back = const_cast<Route*>(_network_topology->get_return_route_from_info(src_it->first));
                 XcpSink* new_sink = _sink->create_new_sink();
 
+                XcpRouteInfo tr(0,new_route_out);
+                XcpRouteInfo tb(0,new_route_back);
+
+                cout << tr << endl;
+                cout << tb << endl;
+
                 new_route_out->push_back(new_sink);
                 new_route_back->push_back(new_src);
 
                 new_src->connect(*new_route_out, *new_route_back, *new_sink, eventlist().now());
+
+                src_it->second = new_src;
             }
         }
 
@@ -115,12 +147,27 @@ void MultipathXcpSrc::update_subflow_list(size_t number_of_paths) {
 
         _garbage_collection_time = eventlist().now() + 2 * max_rtt;
     }
+    cout << "FINISH UPDATING SUBFLOW LIST" << endl;
 }
 
 void MultipathXcpSrc::adjust_subflow_throughput() {
+    cout << "ADJUSTING SUBFLOW THROUGHPUT" << endl;
     int64_t remaining_throughput = _app_limited;
+
     for (auto src : _subflows) {
+        double set_throughput = src.second->route_max_throughput();
+        if (remaining_throughput < set_throughput) {
+            set_throughput = remaining_throughput;
+        }
+        remaining_throughput -= set_throughput;
+        src.second->set_app_limit(set_throughput);
+    }
+
+/*
+    for (auto src : _subflows) {
+        cout << "GET SUBFLOW TP" << endl;
         remaining_throughput -= static_cast<int64_t>(src.second->throughput());
+        cout << src.second->throughput() << endl;
     }
 
     _active_routes = 0;
@@ -128,36 +175,48 @@ void MultipathXcpSrc::adjust_subflow_throughput() {
     auto lp = _subflows.begin();
     auto rp = _subflows.end();
     --rp;
+    cout << "HERE" << endl;
+    cout << remaining_throughput << endl;
     do {
         ++_active_routes;
+        cout << lp->second->route_spare_throughput() << endl;
         while (lp != rp && remaining_throughput < static_cast<int64_t>(lp->second->route_spare_throughput())) {
+            cout << "Moving right pointer" << endl;
             remaining_throughput += rp->second->throughput();
             rp->second->set_app_limit(0);
             --rp;
         }
 
-        int64_t pktps = remaining_throughput;
-        if (pktps > static_cast<int64_t>(lp->second->route_spare_throughput())) {
-            pktps = static_cast<int64_t>(lp->second->route_spare_throughput());
+        double bps = remaining_throughput;
+        if (bps > static_cast<int64_t>(lp->second->route_spare_throughput())) {
+            bps = static_cast<int64_t>(lp->second->route_spare_throughput());
         }
-        remaining_throughput -= pktps;
-        pktps += lp->second->throughput();
-        pktps /= (Packet::data_packet_size() * 8);
-        lp->second->set_app_limit(pktps);
+        remaining_throughput -= bps;
+        bps += lp->second->throughput();
+        //pktps /= (Packet::data_packet_size() * 8);
+        lp->second->set_app_limit(10000);
+        //lp->second->set_app_limit(bps);
+        cout << "(1)Moving left pointer: throughput: " << bps << endl;
+
     } while (lp++ != rp);
+    cout << "HERE2" << endl;
 
     while (remaining_throughput > 0 && lp != _subflows.end()) {
-        int64_t pktps = remaining_throughput;
-        if (pktps > static_cast<int64_t>(lp->second->route_spare_throughput())) {
-            pktps = static_cast<int64_t>(lp->second->route_spare_throughput());
+        double bps = remaining_throughput;
+        if (bps > static_cast<int64_t>(lp->second->route_spare_throughput())) {
+            bps = static_cast<int64_t>(lp->second->route_spare_throughput());
         }
-        remaining_throughput -= pktps;
-        pktps += lp->second->throughput();
-        pktps /= (Packet::data_packet_size() * 8);
-        lp->second->set_app_limit(pktps);
+        remaining_throughput -= bps;
+        bps += lp->second->throughput();
+        //pktps /= (Packet::data_packet_size() * 8);
+        lp->second->set_app_limit(bps);
         ++lp;
         ++_active_routes;
+        cout << "(2)Moving left pointer: throughput: " << bps << endl;
     }
+*/
+    cout << "FINISH ADJUSTING THROUGHPUT" << endl;
+
 }
 
 XcpSrc* MultipathXcpSrc::create_new_src() {
@@ -177,9 +236,18 @@ void MultipathXcpSrc::remove_src(XcpSrc* src) {
 
 void MultipathXcpSrc::collect_garbage() {
     if (_garbage_collection_time > eventlist().now()) {
+        cout << "GARBAGE COLLECTION: SIZE: " << _garbage.size() << endl;
         for (auto src : _garbage) {
-            delete src->_route;
-            delete src->_sink->_route;
+            if (src->_route->is_using_refcount()) {
+                src->_route->decr_refcount();
+            } else {
+                delete src->_route;
+            }
+            if (src->_sink->_route->is_using_refcount()) {
+                src->_sink->_route->decr_refcount();
+            } else {
+                delete src->_sink->_route;
+            }
 
             _sink->remove_sink(src->_sink);
             remove_src(src);
@@ -206,6 +274,10 @@ simtime_picosec MultipathXcpSrc::update_route_update_interval() {
         _route_update_interval = MIN_ROUTE_UPDATE_INTERVAL;
     }
 
+    if (_route_update_interval < MIN_ROUTE_UPDATE_INTERVAL) {
+        _route_update_interval = MIN_ROUTE_UPDATE_INTERVAL;
+    }
+
     return _route_update_interval;
 }
 
@@ -222,7 +294,7 @@ linkspeed_bps MultipathXcpSrc::update_total_throughput() {
 //  MPXCP SINK
 ////////////////////////////////////////////////////////////////
 
-const simtime_picosec MultipathXcpSink::_sink_logger_interval = 1000000000000;
+const simtime_picosec MultipathXcpSink::_sink_logger_interval = 100000000000;
 
 MultipathXcpSink::MultipathXcpSink() : Logged("mpxcpsink") {}
 
@@ -233,7 +305,7 @@ XcpSink* MultipathXcpSink::create_new_sink() {
 
     XcpSinkLoggerSampling* sink_logger = new XcpSinkLoggerSampling(_sink_logger_interval, *_eventlist);
     _logfile->addLogger(*sink_logger);
-    sink_logger->monitorSink(new_sink);
+    sink_logger->monitorXcpSink(new_sink);
 
     _sinks[new_sink] = sink_logger;
 

@@ -4,6 +4,14 @@
 //  XCPROUTEINFO SOURCE
 ////////////////////////////////////////////////////////////////
 
+std::ostream& operator<< (std::ostream& os, const XcpRouteInfo& obj) {
+    os << obj._rtt << " ";
+    for (auto it = obj._route->begin() ; it != obj._route->end() ; ++it) {
+        os << *it << " ";
+    }
+    return os;
+}
+
 XcpRouteInfo::XcpRouteInfo(simtime_picosec rtt, Route* route) : _rtt(rtt), _route(route) {}
 
 const simtime_picosec XcpRouteInfo::rtt() const {
@@ -16,9 +24,13 @@ const Route* XcpRouteInfo::route() const {
 
 void XcpRouteInfo::set_route(const Route* route) const {
     if (_route != route) {
-        delete _route;
+        if (_route) {
+            cout << "DECR in XCPROUTEINFO SET ROUTE" << endl;
+            _route->decr_refcount();
+        }
+        _route = const_cast<Route*>(route);
+        _route->incr_refcount();
     }
-    _route = const_cast<Route*>(route);
 }
 
 
@@ -37,10 +49,12 @@ const bool XcpRouteInfo::operator < (const XcpRouteInfo &rhs) const {
                 return true;
             }
         }
+        /*
         if (it2 == rhs.route()->end()) {
             return false;
         }
         return true;
+        */
     }
     return false;
 }

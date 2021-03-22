@@ -12,6 +12,10 @@
 
 class XcpNetworkTopology {
     public:
+        XcpNetworkTopology(EventList& eventlist,
+		  linkspeed_bps uplinkbitrate, mem_b uplinkqueuesize,
+		  linkspeed_bps downlinkbitrate, mem_b downlinkqueuesize,
+		  linkspeed_bps islbitrate, mem_b islqueuesize);
         bool changed();
         map<XcpRouteInfo,XcpSrc*> get_paths(MultipathXcpSrc* src, MultipathXcpSink* sink, simtime_picosec time, size_t number = 10);
         const Route* get_route_from_info(const XcpRouteInfo &info) const;

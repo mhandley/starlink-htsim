@@ -129,10 +129,16 @@ void Link::doNextEvent() {
 }
 
 simtime_picosec Link::delay(simtime_picosec time) {
+#ifdef XCP_STATIC_NETWORK
+    static const simtime_picosec delay = timeFromMs(7);
+    Pipe::set_delay(delay);
+    return delay;
+#else
     double dist = _src->distance(*_dst, time);
     simtime_picosec delay = timeFromDistVacuum(dist);
     Pipe::set_delay(delay);
     return delay;
+#endif
 }
 
 simtime_picosec Link::retrieve_delay() {

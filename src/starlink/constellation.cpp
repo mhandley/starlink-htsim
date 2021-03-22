@@ -3,12 +3,54 @@
 #include "binary_heap.h"
 #include "constellation.h"
 
+// Must set Link::_logfile,
+// Link::_queue_logger_sampling_interval,
+// MultipathXcpSink::_logfile,
+// MultipathXcpSink::_eventlist,
+// MultipathXcpSrc::network_topology,
+// MultipathXcpSrc::_logfile before use
 Constellation::Constellation(EventList& eventlist,
                   linkspeed_bps uplinkbitrate, mem_b uplinkqueuesize,
                   linkspeed_bps downlinkbitrate, mem_b downlinkqueuesize,
                   linkspeed_bps islbitrate, mem_b islqueuesize) :
     _link_factory(eventlist), heap(MAXNODES), _route_src(0)
 {
+#ifdef XCP_STATIC_NETWORK
+    Logfile* lg;
+
+    _linkbitrate[::UPLINK] = uplinkbitrate;
+    _linkbitrate[::DOWNLINK] = downlinkbitrate;
+    _linkbitrate[::ISL] = islbitrate;
+    
+    _linkqueuesize[::UPLINK] = uplinkqueuesize;
+    _linkqueuesize[::DOWNLINK] = downlinkqueuesize;
+    _linkqueuesize[::ISL] = islqueuesize;
+    
+    Node::link_factory = &_link_factory;
+
+	_sats[0] = new Satellite(0, 0, 0, 53.0, -5, 10, 0, 0);
+	_sats[1] = new Satellite(0, 1, 1, 53.0, 0, 10, 0, 0);
+	_sats[2] = new Satellite(0, 2, 2, 53.0, 5, 10, 0, 0);
+	_sats[3] = new Satellite(0, 3, 3, 53.0, -5, 0, 0, 0);
+	_sats[4] = new Satellite(0, 4, 4, 53.0, 5, 0, 0, 0);
+	_sats[5] = new Satellite(0, 5, 5, 53.0, -5, -10, 0, 0);
+	_sats[6] = new Satellite(0, 6, 6, 53.0, 0, -10, 0, 0);
+	_sats[7] = new Satellite(0, 7, 7, 53.0, 5, -10, 0, 0);
+
+	_num_sats = 8;
+
+	_sats[0]->add_link_to_dst(*(_sats[1]), _linkbitrate[ISL], _linkqueuesize[ISL]);
+	_sats[1]->add_link_to_dst(*(_sats[0]), _linkbitrate[ISL], _linkqueuesize[ISL]);
+	_sats[1]->add_link_to_dst(*(_sats[2]), _linkbitrate[ISL], _linkqueuesize[ISL]);
+	_sats[2]->add_link_to_dst(*(_sats[1]), _linkbitrate[ISL], _linkqueuesize[ISL]);
+	_sats[3]->add_link_to_dst(*(_sats[4]), _linkbitrate[ISL], _linkqueuesize[ISL]);
+	_sats[4]->add_link_to_dst(*(_sats[3]), _linkbitrate[ISL], _linkqueuesize[ISL]);
+	_sats[5]->add_link_to_dst(*(_sats[6]), _linkbitrate[ISL], _linkqueuesize[ISL]);
+	_sats[6]->add_link_to_dst(*(_sats[5]), _linkbitrate[ISL], _linkqueuesize[ISL]);
+	_sats[6]->add_link_to_dst(*(_sats[7]), _linkbitrate[ISL], _linkqueuesize[ISL]);
+	_sats[7]->add_link_to_dst(*(_sats[6]), _linkbitrate[ISL], _linkqueuesize[ISL]);
+
+#else
     Logfile* lg;
 
     _linkbitrate[::UPLINK] = uplinkbitrate;
@@ -107,6 +149,7 @@ Constellation::Constellation(EventList& eventlist,
 	_sats[sat]->print_links();
     }
     */
+#endif
 }
 
 void
@@ -200,7 +243,7 @@ Constellation::find_route(City& dst) {
     }
     */
 
-    if (&dynamic_cast<Link*>(*(++(route->begin())))->src() != _route_src) {
+    if (std::distance(route->begin(),route->end()) < 2 || &dynamic_cast<Link*>(*(++(route->begin())))->src() != _route_src) {
 		delete route;
 		return NULL;
 	}

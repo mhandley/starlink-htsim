@@ -1,5 +1,10 @@
 #include "xcpnetworktopology.h"
 
+XcpNetworkTopology::XcpNetworkTopology(EventList& eventlist,
+		  linkspeed_bps uplinkbitrate, mem_b uplinkqueuesize,
+		  linkspeed_bps downlinkbitrate, mem_b downlinkqueuesize,
+		  linkspeed_bps islbitrate, mem_b islqueuesize) : _constellation(eventlist,uplinkbitrate,uplinkqueuesize,downlinkbitrate,downlinkqueuesize,islbitrate,islqueuesize){}
+
 bool XcpNetworkTopology::changed() {
     return false;
 }
@@ -45,8 +50,8 @@ const Route* XcpNetworkTopology::get_return_route_from_info(const XcpRouteInfo &
                 delete ans;
                 return NULL;
             } else {
-                ans->push_back(static_cast<PacketSink*>(link->queue()));
-                ans->push_back(static_cast<PacketSink*>(link));
+                ans->push_back(static_cast<PacketSink*>(reverse_link->queue()));
+                ans->push_back(static_cast<PacketSink*>(reverse_link));
             }
         }
         if (it == route->begin()) {
@@ -80,9 +85,21 @@ Link* XcpNetworkTopology::get_reverse_link(Link* link) const {
     if (link->reverse_link()) {
         return link->reverse_link();
     }
-    Node& u = link->get_neighbour(link->src());
+    const Node& u = link->dst();
+/*
+    cout << "Getting Reverse Link: Src " << &(link->src()) << " Dst " << &(link->dst()) << endl;
 
+    for (auto it = link->src()._links.begin() ; it != link->src()._links.end() ; ++it) {
+        cout << *it << endl;
+    }
+    cout << endl;
+    for (auto it = link->dst()._links.begin() ; it != link->dst()._links.end() ; ++it) {
+        cout << *it << endl;
+    }
+    cout << endl;
+*/
     for (auto it = u._links.begin() ; it != u._links.end() ; ++it) {
+        cout << *it << endl;
         if (&((*it)->dst()) == &(link->src())) {
             link->set_reverse_link(*it);
             return *it;

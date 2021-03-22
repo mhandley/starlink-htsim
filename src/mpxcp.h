@@ -28,7 +28,7 @@ class XcpNetworkTopology;
 class XcpSinkLoggerSampling;
 class MultipathXcpSink;
 
-// Must set network_topology and logfile before use
+// Must set network_topology and _logfile before use
 class MultipathXcpSrc : public PacketSink, public EventSource {
     friend class MultipathXcpSink;
 public:
@@ -39,6 +39,8 @@ public:
     uint32_t get_id() const {return id;}//
     void startflow();//
     void doNextEvent();//
+    void set_start_time(simtime_picosec starttime);//
+    void set_sink(MultipathXcpSink* sink);
     void set_flowsize(uint64_t flow_size_in_bytes);//
     void set_app_limit(int pktps);//
     void update_subflow_list(size_t number_of_paths);//

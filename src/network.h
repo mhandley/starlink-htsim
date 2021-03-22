@@ -162,7 +162,7 @@ class PacketDB {
     };
     void freePacket(P* pkt) {
 	assert(pkt->route());
-	pkt->route()->decr_refcount();
+	//pkt->route()->decr_refcount();
 	_freelist.push_back(pkt);
     };
 

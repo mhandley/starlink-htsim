@@ -8,7 +8,8 @@
 //  XCP SOURCE
 ////////////////////////////////////////////////////////////////
 
-simtime_picosec XcpSrc::MIN_CTL_PACKET_TIMEOUT = timeFromMs(100);
+simtime_picosec XcpSrc::MIN_CTL_PACKET_TIMEOUT = timeFromMs(10);
+simtime_picosec XcpSrc::MAX_CTL_PACKET_TIMEOUT = timeFromMs(200);
 
 XcpSrc::XcpSrc(XcpLogger* logger, TrafficLogger* pktlogger, 
 	       EventList &eventlist)
@@ -28,6 +29,7 @@ XcpSrc::XcpSrc(XcpLogger* logger, TrafficLogger* pktlogger,
     _app_limited = -1;
     _established = false;
     //_effcwnd = 0;
+	_cwnd = 0;
 
     //_ssthresh = 30000;
     _ssthresh = 0xffffffff;
@@ -58,8 +60,10 @@ XcpSrc::XcpSrc(XcpLogger* logger, TrafficLogger* pktlogger,
 
     _nodename = "xcpsrc";
 
-	_ctl_packet_timeout = eventlist.now() + MIN_CTL_PACKET_TIMEOUT;
-	eventlist.sourceIsPendingRel(*this,MIN_CTL_PACKET_TIMEOUT);
+	_route_max_throughput = INT64_MAX;
+
+	_ctl_packet_timeout = eventlist.now();
+	eventlist.sourceIsPendingRel(*this,0);
 }
 
 #ifdef PACKET_SCATTER
@@ -80,16 +84,34 @@ void XcpSrc::set_paths(vector<const Route*>* rt) {
 void XcpSrc::set_app_limit(int pktps) {
 	// pktps in packets/second
     if (_app_limited==0 && pktps){
-		_cwnd = _mss;
+		_cwnd = START_PACKET_NUMBER * _mss;
     }
     _ssthresh = 0xffffffff;
     _app_limited = static_cast<linkspeed_bps>(pktps) * static_cast<linkspeed_bps>(Packet::data_packet_size()) * static_cast<linkspeed_bps>(8);
-    send_packets();
+	if (_established) {
+    	send_packets();
+	}
+}
+
+void XcpSrc::set_app_limit(double bitsps) {
+	static const double zero = 0.99;
+	if (bitsps <= 0) {
+		bitsps = 0;
+		_cwnd = 0;
+	}
+	if (_app_limited == 0 && bitsps > zero) {
+		_cwnd = START_PACKET_NUMBER * _mss;
+	}
+	_ssthresh = 0xffffffff;
+    _app_limited = bitsps;
+	if (_established) {
+    	send_packets();
+	}
 }
 
 void 
 XcpSrc::startflow() {
-    _cwnd = 2 * _mss;
+    _cwnd = START_PACKET_NUMBER * _mss;
     //_unacked = _cwnd;
     _established = false;
 
@@ -110,17 +132,20 @@ void XcpSrc::replace_route(const Route* newroute) {
 }
 
 linkspeed_bps XcpSrc::throughput() const {
+	if (_rtt == 0) {
+		return 0;
+	}
 	linkspeed_bps ans = _cwnd * 8;
 	ans /= timeAsSec(_rtt);
+
+	cout << "CWND: " << _cwnd << endl;
+	cout << "COMPUTING THROUGHPUT: " << ans << endl;
 
 	return ans;
 }
 
-linkspeed_bps XcpSrc::route_spare_throughput() const {
-	if (_route_spare_throughput < 0) {
-		return 0;
-	}
-	return _route_spare_throughput;
+linkspeed_bps XcpSrc::route_max_throughput() const {
+	return _route_max_throughput;
 }
 
 void 
@@ -141,13 +166,16 @@ XcpSrc::connect(const Route& routeout, const Route& routeback, XcpSink& sink,
 void
 XcpSrc::receivePacket(Packet& pkt) 
 {
+	cout << "SRC: " << get_id() << " time: " << timeAsMs(eventlist().now()) << " CWND: " << _cwnd << endl;
+
+	cout << "SRC receiving packet: " << pkt.type() << endl;
 	if (pkt.type() == XCPCTLACK) {
 		XcpCtlAck* p = dynamic_cast<XcpCtlAck*>(&pkt);
-		_route_spare_throughput = p->allowed_throughput();
+		_route_max_throughput = p->allowed_throughput();
 
 		// Maybe we can update rtt also using control packet
 		//compute rtt
-    	uint64_t m = eventlist().now()-p->ts_echo();
+    	uint64_t m = eventlist().now() - p->ts_echo();
 
     	if (m!=0){
         	if (_rtt>0){
@@ -170,8 +198,12 @@ XcpSrc::receivePacket(Packet& pkt)
 		return;
 	}
 
+	XcpAck *p = dynamic_cast<XcpAck*>(&pkt);
+	if (p == NULL) {
+		return;
+	}
+
     simtime_picosec ts_echo;
-    XcpAck *p = (XcpAck*)(&pkt);
     XcpAck::seq_t seqno = p->ackno();
 
     pkt.flow().logTraffic(pkt,*this,TrafficLogger::PKT_RCVDESTROY);
@@ -282,7 +314,7 @@ XcpSrc::receivePacket(Packet& pkt)
 	    }
 		// We're in fast recovery, i.e. one packet has been
 		// dropped but we're pretending it's not serious
-		if (seqno >= _recoverq) { 
+		if (seqno >= _recoverq) {
 			// got ACKs for all the "recovery window": resume
 			// normal service
 			//uint32_t flightsize = _highest_sent - seqno;
@@ -422,16 +454,34 @@ This is TCP implementation
 // Note: the data sequence number is the number of Byte1 of the packet, not the last byte.
 void 
 XcpSrc::send_packets() {
-	cout << "FUCK ENTER HERE" << endl;
+	cout << "SRC sending packet" << endl;
     int c = _cwnd;
 
-	int32_t demand = MAX_THROUGHPUT;
+	double demand = MAX_THROUGHPUT;
+
+	cout << "DEMAND 1: " << demand << endl;
+	if (_rtt != 0) {
+		demand = _app_limited * timeAsSec(_rtt) / 8 - c;
+	}
+
+	cout << "DEMAND 2: " << demand << endl;;
+
+	if (demand <= 0) {
+		demand = 0;
+		_cwnd = _app_limited * timeAsSec(_rtt) / 8;
+		c = _cwnd;
+	}
+
+	if (demand >= MAX_THROUGHPUT) {
+		demand = MAX_THROUGHPUT;
+	}
 
     if (!_established){
 		//send SYN packet and wait for SYN/ACK
 		Packet * p  = XcpPacket::new_syn_pkt(_flow, *_route, 1, 1, demand);
 		_highest_sent = 1;
 
+		cout << "SENDON1" << endl;
 		p->sendOn();
 
 		if(_RFC2988_RTO_timeout == timeInf) {// RFC2988 5.1
@@ -440,7 +490,7 @@ XcpSrc::send_packets() {
 		//cout << "Sending SYN, waiting for SYN/ACK" << endl;
 		return;
     }
-
+/*
     if (_app_limited >= 0 && _rtt > 0) {
 		uint64_t d = (uint64_t)_app_limited * _rtt / timeFromSec(1) / 8;
 		if (c > d) {
@@ -456,6 +506,8 @@ XcpSrc::send_packets() {
 		//rtt in ms
 		//printf("%d\n",c);
     }
+*/
+	cout << "WINDOW: " << c << endl;
 
     while ((_last_acked + c >= _highest_sent + _mss) 
 	   && (_highest_sent + _mss <= _flow_size + 1)) {
@@ -467,7 +519,8 @@ XcpSrc::send_packets() {
 		
 		_highest_sent += _mss;  //XX beware wrapping
 		_packets_sent += _mss;
-
+		
+		cout << "SENDON2" << endl;
 		p->sendOn();
 
 		if(_RFC2988_RTO_timeout == timeInf) {// RFC2988 5.1
@@ -478,12 +531,27 @@ XcpSrc::send_packets() {
 
 void 
 XcpSrc::retransmit_packet() {
-	int32_t demand = MAX_THROUGHPUT;
+	double demand = MAX_THROUGHPUT;
+	if (_rtt != 0) {
+		demand = _app_limited * timeAsSec(_rtt) / 8 - _cwnd;
+	}
+
+	if (demand <= 0) {
+		demand = 0;
+		_cwnd = _app_limited * timeAsSec(_rtt) / 8;
+	}
+
+	if (demand >= MAX_THROUGHPUT) {
+		demand = MAX_THROUGHPUT;
+	}
+
     if (!_established){
 		assert(_highest_sent == 1);
 
 		//uint32_t demand = _mss * 2; // request 2 pkt initial window
 		Packet* p  = XcpPacket::new_syn_pkt(_flow, *_route, 1, 1, demand);
+
+		cout << "SENDON3" << endl;
 		p->sendOn();
 
 		cout << "Resending SYN, waiting for SYN/ACK" << endl;
@@ -497,6 +565,8 @@ XcpSrc::retransmit_packet() {
 
     p->flow().logTraffic(*p,*this,TrafficLogger::PKT_CREATESEND);
     p->set_ts(eventlist().now());
+
+	cout << "SENDON4" << endl;
     p->sendOn();
 
     _packets_sent += _mss;
@@ -548,10 +618,18 @@ void XcpSrc::rtx_timer_hook(simtime_picosec now, simtime_picosec period) {
 
 void XcpSrc::doNextEvent() {
 	if (_ctl_packet_timeout <= eventlist().now()) {
-		Packet* p = XcpCtlPacket::newpkt(_flow, *_route);
+		cout << "ROUTE ADDRESS: " << _route << endl;
+		XcpCtlPacket* p = XcpCtlPacket::newpkt(_flow, *_route);
+		p->flow().logTraffic(*p,*this,TrafficLogger::PKT_CREATESEND);
+        p->set_ts(eventlist().now());
+		cout << "SENDON5" << endl;
 		p->sendOn();
+		cout << "SENDON5 SUCCEED" << endl;
 
 		simtime_picosec timeout = _rtt;
+		if (timeout == 0 || timeout > MAX_CTL_PACKET_TIMEOUT || _cwnd == 0) {
+			timeout = MAX_CTL_PACKET_TIMEOUT;
+		}
 		if (timeout < MIN_CTL_PACKET_TIMEOUT) {
 			timeout = MIN_CTL_PACKET_TIMEOUT;
 		}
@@ -627,12 +705,17 @@ XcpSink::receivePacket(Packet& pkt) {
 		XcpCtlAck* ack = XcpCtlAck::newpkt(_src->_flow, *_route, p->throughput());
 		ack->flow().logTraffic(*ack,*this,TrafficLogger::PKT_CREATESEND);
 		ack->set_ts_echo(p->ts());
+		cout << "SENDON6" << endl;
 		ack->sendOn();
 		p->free();
 		return;
 	}
 
-    XcpPacket *p = (XcpPacket*)(&pkt);
+    XcpPacket *p = dynamic_cast<XcpPacket*>(&pkt);
+	if (p == NULL) {
+		return;
+	}
+
     XcpPacket::seq_t seqno = p->seqno();
     simtime_picosec ts = p->ts();
 
@@ -706,6 +789,7 @@ XcpSink::send_ack(simtime_picosec ts, bool marked, uint32_t cwnd, int32_t demand
     // else
 	// ack->set_flags(0);
 
+	cout << "SENDON7" << endl;
     ack->sendOn();
 }
 

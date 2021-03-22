@@ -32,6 +32,7 @@ class Route {
     inline int path_id() const {return _path_id;}
     inline int no_of_paths() const {return _no_of_paths;}
     string str() const;
+    bool is_using_refcount() const;
     void use_refcount() const; // reference counting so we only delete
 			 // dynamic routes when no-one is using them
 			 // anymore

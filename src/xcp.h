@@ -45,7 +45,7 @@ class XcpSrc : public PacketSink, public EventSource {
     void set_ssthresh(uint64_t s){_ssthresh = s;}
 
     linkspeed_bps throughput() const;
-    linkspeed_bps route_spare_throughput() const;
+    linkspeed_bps route_max_throughput() const;
 
     //uint32_t effective_window();
     virtual void rtx_timer_hook(simtime_picosec now,simtime_picosec period);
@@ -62,7 +62,7 @@ class XcpSrc : public PacketSink, public EventSource {
     uint16_t _dupacks;
     linkspeed_bps _app_limited;  // Unit: bits/second
 
-    int64_t _route_spare_throughput;
+    int64_t _route_max_throughput;
 
     //round trip time estimate, needed for coupled congestion control
     simtime_picosec _rtt, _rto, _mdev;
@@ -87,9 +87,11 @@ class XcpSrc : public PacketSink, public EventSource {
     bool _rtx_timeout_pending;
 
     static simtime_picosec MIN_CTL_PACKET_TIMEOUT;
+    static simtime_picosec MAX_CTL_PACKET_TIMEOUT;
     simtime_picosec _ctl_packet_timeout;
 
     void set_app_limit(int pktps);
+    void set_app_limit(double bitsps);
 
     const Route* _route;
     //simtime_picosec _last_ping;
@@ -101,8 +103,8 @@ class XcpSrc : public PacketSink, public EventSource {
     //virtual void deflate_window();
 
  private:
-
-    static const int32_t MAX_THROUGHPUT = INT32_MAX;
+    static const size_t START_PACKET_NUMBER = 2;
+    static const int32_t MAX_THROUGHPUT = INT32_MAX - 1;
 
     const Route* _old_route;
     uint64_t _last_packet_with_old_route;

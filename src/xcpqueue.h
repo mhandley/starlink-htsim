@@ -36,8 +36,8 @@ class XcpQueue : public Queue {
     simtime_picosec _queue_update_time;
     mem_b _persistent_queue_size;
     mem_b _min_queue_size;
-    int64_t _residue_pos_feedback;
-    int64_t _residue_neg_feedback;
+    float _residue_pos_feedback;
+    float _residue_neg_feedback;
 
     static const double XCP_ALPHA;
     static const double XCP_BETA;

@@ -68,7 +68,11 @@ int main() {
 	simtime_picosec now = eventlist.now();
 	if (timeAsMs(now - last_route_update) > 100) {
 	    london.update_uplinks(eventlist.now());
-            newyork.update_uplinks(eventlist.now());
+        newyork.update_uplinks(eventlist.now());
+
+        rt_out->decr_refcount();
+        rt_back->decr_refcount();
+
 	    rt_out = london.find_route(newyork, eventlist.now());
 	    rt_back = newyork.find_route(london, eventlist.now());
 	    rt_out->push_back(static_cast<PacketSink*>(&pingserver));
