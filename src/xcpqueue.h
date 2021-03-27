@@ -6,6 +6,7 @@
  * A simple FIFO queue that drops randomly when it gets full
  */
 
+#include <map>
 #include <list>
 #include "config.h"
 #include "eventlist.h"
@@ -15,7 +16,7 @@
 class XcpQueue : public Queue {
  public:
     XcpQueue(linkspeed_bps bitrate, mem_b maxsize, EventList &eventlist, 
-	     QueueLogger* logger, double utilization_target = 1.0);
+	     QueueLogger* logger, double utilization_target = 0.9);
     virtual void receivePacket(Packet& pkt);
     virtual void completeService();
 
@@ -46,6 +47,11 @@ class XcpQueue : public Queue {
     static const double P_RTT;
     static const simtime_picosec MIN_IDLE_INTERVAL;
     static const simtime_picosec MAX_PACKET_RTT;
+
+#ifdef MPXCP_VERSION_1
+    static const size_t MAX_THROUGHPUT_SIZE;
+    map<linkspeed_bps,simtime_picosec,std::greater<linkspeed_bps> > _max_throughputs;
+#endif
 
     void update_persistent_queue_size();
 };

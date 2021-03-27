@@ -64,6 +64,8 @@ XcpSrc::XcpSrc(XcpLogger* logger, TrafficLogger* pktlogger,
 
 	_ctl_packet_timeout = eventlist.now();
 	eventlist.sourceIsPendingRel(*this,0);
+
+	_mpxcp_src = NULL;
 }
 
 #ifdef PACKET_SCATTER
@@ -129,6 +131,10 @@ void XcpSrc::replace_route(const Route* newroute) {
 	//_last_ping = timeInf;
 
     //  Printf("Wiating for ack %d to delete\n",_last_packet_with_old_route);
+}
+
+void XcpSrc::set_mpxcp_xrc(MultipathXcpSrc* src) {
+	_mpxcp_src = src;
 }
 
 linkspeed_bps XcpSrc::throughput() const {
@@ -459,17 +465,18 @@ XcpSrc::send_packets() {
 
 	double demand = MAX_THROUGHPUT;
 
-	cout << "DEMAND 1: " << demand << endl;
 	if (_rtt != 0) {
 		demand = _app_limited * timeAsSec(_rtt) / 8 - c;
 	}
 
-	cout << "DEMAND 2: " << demand << endl;;
+	cout << "DEMAND 2: " << demand << " RTT: " << timeAsSec(_rtt) << endl;;
 
 	if (demand <= 0) {
+		cout << "BEFORE CHANGING C: " << c << endl;
 		demand = 0;
 		_cwnd = _app_limited * timeAsSec(_rtt) / 8;
 		c = _cwnd;
+		cout << "AFTER CHANGING C: " << c << endl;
 	}
 
 	if (demand >= MAX_THROUGHPUT) {
@@ -507,7 +514,7 @@ XcpSrc::send_packets() {
 		//printf("%d\n",c);
     }
 */
-	cout << "WINDOW: " << c << endl;
+	cout << this->nodename() << " " << this << " WINDOW: " << c << " DEMAND: " << demand << endl;
 
     while ((_last_acked + c >= _highest_sent + _mss) 
 	   && (_highest_sent + _mss <= _flow_size + 1)) {
@@ -702,6 +709,7 @@ void
 XcpSink::receivePacket(Packet& pkt) {
 	if (pkt.type() == XCPCTL) {
 		XcpCtlPacket* p = dynamic_cast<XcpCtlPacket*>(&pkt);
+		cout << this->nodename() << " Receiving Control Packet with size: " << p->throughput() << " addr: " << p << endl;
 		XcpCtlAck* ack = XcpCtlAck::newpkt(_src->_flow, *_route, p->throughput());
 		ack->flow().logTraffic(*ack,*this,TrafficLogger::PKT_CREATESEND);
 		ack->set_ts_echo(p->ts());

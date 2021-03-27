@@ -13,7 +13,10 @@ const double XcpQueue::XCP_GAMMA = 0.1;
 const simtime_picosec XcpQueue::XCP_TOLERATE_QUEUE_TIME = 2000000000;  // 2000000000 picoseconds(2ms)
 const double XcpQueue::P_RTT = 0.125;
 const simtime_picosec XcpQueue::MIN_IDLE_INTERVAL = 5000000000;  // 5000000000 picoseconds(5ms)
-const simtime_picosec XcpQueue::MAX_PACKET_RTT = 500000000000; // 500000000000 picoseconds(5ms)
+const simtime_picosec XcpQueue::MAX_PACKET_RTT = 500000000000; // 500000000000 picoseconds(500ms)
+#ifdef MPXCP_VERSION_1
+const size_t XcpQueue::MAX_THROUGHPUT_SIZE = 10;
+#endif
 
 XcpQueue::XcpQueue(linkspeed_bps bitrate, mem_b maxsize, 
            EventList& eventlist, QueueLogger* logger,
@@ -33,6 +36,7 @@ XcpQueue::XcpQueue(linkspeed_bps bitrate, mem_b maxsize,
 {
     _control_interval = timeFromMs(100);
     cout << "bitrate: " << bitrate << " target: " << _target_bitrate << endl;
+    _rate_to_allocate = _target_bitrate;
 }
 /*
 #define XCP_ALPHA 0.4
@@ -132,6 +136,24 @@ XcpQueue::receivePacket(Packet& pkt)
     if (pkt.type() == XCP) {
         XcpPacket* xcp_pkt = static_cast<XcpPacket*>(&pkt);
         simtime_picosec rtt = xcp_pkt->rtt();
+
+#ifdef MPXCP_VERSION_1
+        cout << "BEFORE IF" << endl;
+        if (xcp_pkt->rtt() > 0) {
+            linkspeed_bps throughput = 0;
+            throughput = xcp_pkt->cwnd();
+            throughput *= 8UL;
+            throughput /= timeAsSec(rtt);
+            _max_throughputs[throughput] = now;
+            auto it = _max_throughputs.upper_bound(throughput);
+            _max_throughputs.erase(it,_max_throughputs.end());
+            if (_max_throughputs.size() > MAX_THROUGHPUT_SIZE) {
+                _max_throughputs.erase(_max_throughputs.begin());
+            }
+        }
+        cout << "AFTER IF" << endl;
+#endif
+
         uint16_t psize = pkt.size();
         uint32_t cwnd = xcp_pkt->cwnd();
         int32_t demand = xcp_pkt->demand();
@@ -184,10 +206,37 @@ XcpQueue::receivePacket(Packet& pkt)
     }
 
     if (pkt.type() == XCPCTL) {
+        linkspeed_bps max_throughput = INT64_MAX;
         XcpCtlPacket* p = dynamic_cast<XcpCtlPacket*>(&pkt);
-        int32_t free_throughput = _target_bitrate - _mean_bitrate;
-        if (free_throughput < p->throughput()) {
-            p->set_throughput(free_throughput);
+
+#ifdef MPXCP_VERSION_1
+        cout << "BEFORE XCPCTL ADJUST" << endl;
+        cout << "addr: " << p << endl;
+        cout << "MAX THROUGHPUT SIZE: " << _max_throughputs.size() << endl;
+        for (auto it = _max_throughputs.begin() ; it != _max_throughputs.end() ; ) {
+            cout << "it first: " << it->first << " it second: " << timeAsMs(it->second) << " Mean rtt: " << timeAsMs(_mean_rtt) << " Now: " << now << endl;;
+            if (it->second + _mean_rtt < now) {
+                cout << "ERASED" << endl;
+                _max_throughputs.erase(it++);
+/*
+                if (it != _max_throughputs.begin()) {
+                    --it;
+                }
+*/
+            } else {
+                cout << "BROKEN" << endl;
+                max_throughput = it->first;
+                break;
+            }
+        }
+        max_throughput += _rate_to_allocate;
+        cout << "AFTER XCPCTL ADJUST" << endl;
+        cout << "MAX THROUGHPUT SIZE: " << _max_throughputs.size() << endl;
+        cout << max_throughput << endl;
+#endif
+
+        if (max_throughput < p->throughput()) {
+            p->set_throughput(max_throughput);
         }
     }
 

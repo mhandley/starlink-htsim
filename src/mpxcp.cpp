@@ -154,13 +154,35 @@ void MultipathXcpSrc::adjust_subflow_throughput() {
     cout << "ADJUSTING SUBFLOW THROUGHPUT" << endl;
     int64_t remaining_throughput = _app_limited;
 
+    cout << remaining_throughput << endl;
+
     for (auto src : _subflows) {
         double set_throughput = src.second->route_max_throughput();
+        cout << this << " Max Throughput: " << set_throughput << endl;
         if (remaining_throughput < set_throughput) {
             set_throughput = remaining_throughput;
         }
         remaining_throughput -= set_throughput;
+        cout << src.second << " Setting TP: " << set_throughput << endl;
+
         src.second->set_app_limit(set_throughput);
+/*
+        if (eventlist().now() < timeFromSec(10)) {
+            if (src.first.rtt() == timeFromMs(42)) {
+                src.second->set_app_limit(1250);
+            } else {
+                src.second->set_app_limit(250);
+            }
+        }
+        else {
+            if (src.first.rtt() == timeFromMs(42)) {
+                src.second->set_app_limit(625);
+            } else {
+                src.second->set_app_limit(875);
+            }
+        }
+*/
+        cout << "REMAINING TP: " << remaining_throughput << endl;
     }
 
 /*
@@ -223,6 +245,8 @@ XcpSrc* MultipathXcpSrc::create_new_src() {
     XcpSrc* new_src = new XcpSrc(NULL, NULL, eventlist());
     new_src->setName("xcpsrc_" + to_string(this->get_id()) + "_" + to_string(new_src->get_id()));
     _logfile->writeName(*new_src);
+
+    new_src->set_mpxcp_xrc(this);
 
     _xcp_rtx_scanner.registerXcp(*new_src);
 

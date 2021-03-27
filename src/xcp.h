@@ -42,6 +42,8 @@ class XcpSrc : public PacketSink, public EventSource {
 	cout << "Setting flow size to " << _flow_size << endl;
     }
 
+    void set_mpxcp_xrc(MultipathXcpSrc* src);
+
     void set_ssthresh(uint64_t s){_ssthresh = s;}
 
     linkspeed_bps throughput() const;
@@ -125,6 +127,8 @@ class XcpSrc : public PacketSink, public EventSource {
     //void clearWhen(XcpAck::seq_t from, XcpAck::seq_t to);
     //void showWhen (int from, int to);
     string _nodename;
+
+    MultipathXcpSrc* _mpxcp_src;
 };
 
 class XcpSink : public PacketSink, public DataReceiver, public Logged {

@@ -1,5 +1,6 @@
 // -*- c-basic-offset: 4; tab-width: 8; indent-tabs-mode: t -*-                                                                                                               
 #define XCP_STATIC_NETWORK
+#define MPXCP_VERSION_1
 
 #include "xcpnetworktopology.h"
 #include "ping.h"
@@ -55,3 +56,4 @@ int main() {
 }
 
 #undef XCP_STATIC_NETWORK
+#undef MPXCP_VERSION_1
