@@ -1,6 +1,7 @@
 // -*- c-basic-offset: 4; tab-width: 8; indent-tabs-mode: t -*-        
 #include "xcp.h"
 #include "ecn.h"
+#include "mpxcp.h"
 #include <iostream>
 
 #define KILL_THRESHOLD 5
@@ -10,6 +11,7 @@
 
 simtime_picosec XcpSrc::MIN_CTL_PACKET_TIMEOUT = timeFromMs(10);
 simtime_picosec XcpSrc::MAX_CTL_PACKET_TIMEOUT = timeFromMs(200);
+const double XcpSrc::THROUGHPUT_TUNING_P = 0.5;
 
 XcpSrc::XcpSrc(XcpLogger* logger, TrafficLogger* pktlogger, 
 	       EventList &eventlist)
@@ -66,6 +68,10 @@ XcpSrc::XcpSrc(XcpLogger* logger, TrafficLogger* pktlogger,
 	eventlist.sourceIsPendingRel(*this,0);
 
 	_mpxcp_src = NULL;
+	_instantaneous_queuesize = 0;
+	_instantaneous_sent = 0;
+	_persistent_sent = 0;
+	_last_rtt_start_time = 0;
 }
 
 #ifdef PACKET_SCATTER
@@ -144,7 +150,7 @@ linkspeed_bps XcpSrc::throughput() const {
 	linkspeed_bps ans = _cwnd * 8;
 	ans /= timeAsSec(_rtt);
 
-	cout << "CWND: " << _cwnd << endl;
+	cout << "ADDR: " << this << " CWND: " << _cwnd << " NOW: " << timeAsMs(eventlist().now()) << endl;
 	cout << "COMPUTING THROUGHPUT: " << ans << endl;
 
 	return ans;
@@ -461,22 +467,29 @@ This is TCP implementation
 void 
 XcpSrc::send_packets() {
 	cout << "SRC sending packet" << endl;
-    int c = _cwnd;
 
 	double demand = MAX_THROUGHPUT;
 
 	if (_rtt != 0) {
-		demand = _app_limited * timeAsSec(_rtt) / 8 - c;
+		demand = _app_limited * timeAsSec(_rtt) / 8 + _instantaneous_queuesize - _cwnd;
 	}
 
 	cout << "DEMAND 2: " << demand << " RTT: " << timeAsSec(_rtt) << endl;;
 
 	if (demand <= 0) {
-		cout << "BEFORE CHANGING C: " << c << endl;
+		cout << "BEFORE CHANGING CWND: " << _cwnd << endl;
 		demand = 0;
-		_cwnd = _app_limited * timeAsSec(_rtt) / 8;
-		c = _cwnd;
-		cout << "AFTER CHANGING C: " << c << endl;
+		if (_last_rtt_start_time + _rtt < eventlist().now()) {
+			_cwnd = _cwnd * (1.0 - THROUGHPUT_TUNING_P) + (_app_limited * timeAsSec(_rtt) / 8 + _instantaneous_queuesize) * THROUGHPUT_TUNING_P;
+			_last_rtt_start_time = eventlist().now();
+			cout << "AFTER CHANGING CWND: " << _cwnd << endl;
+		}
+	}
+
+	int c = _cwnd;
+
+	if (_instantaneous_queuesize == 0 && _app_limited * timeAsSec(_rtt) / 8.0 < _cwnd) {
+		c = _app_limited * timeAsSec(_rtt) / 8.0;
 	}
 
 	if (demand >= MAX_THROUGHPUT) {
@@ -514,10 +527,45 @@ XcpSrc::send_packets() {
 		//printf("%d\n",c);
     }
 */
-	cout << this->nodename() << " " << this << " WINDOW: " << c << " DEMAND: " << demand << endl;
+	cout << this->nodename() << " " << this << " EFF WINDOW: " << c << " ACTUAL WINDOW: " << _cwnd << " DEMAND: " << demand << endl;
 
     while ((_last_acked + c >= _highest_sent + _mss) 
 	   && (_highest_sent + _mss <= _flow_size + 1)) {
+
+		if (_instantaneous_queuesize > 0) {
+			double target_ratio = _app_limited * timeAsSec(_rtt) / 8.0 / _cwnd;
+			target_ratio = target_ratio / (1.0 - target_ratio);
+
+			cout << this << " TARGET RATIO: " << target_ratio << endl;
+
+			if (target_ratio > 0) {
+				double real_ratio = static_cast<double>(_persistent_sent) / static_cast<double>(_instantaneous_sent);
+
+				cout << this << " REAL RATIO: " << real_ratio << " PS: " << _persistent_sent << " IS: " << _instantaneous_sent << endl;
+
+				if (_instantaneous_sent == 0 || real_ratio > target_ratio) {
+					_instantaneous_sent += _mss;
+					_instantaneous_queuesize -= _mss;
+
+					cout << this << " REQUESTING INSTANTANEOUS PACKET REMAINING: " << _instantaneous_queuesize << " NOW: " << timeAsMs(eventlist().now()) << endl;
+				} else {
+					_persistent_sent += _mss;
+				}
+			}
+		} else {
+			cout << "INSTANTANEOUS QSIZE IS ZERO" << endl;
+			_instantaneous_queuesize = 0;
+			_instantaneous_sent = 0;
+			_persistent_sent = 0;
+		}
+
+		if (_mpxcp_src && !_mpxcp_src->require_one_packet()) {
+			_instantaneous_queuesize = 0;
+			_instantaneous_sent = 0;
+			_persistent_sent = 0;
+			cout << "GOT DECLINED ADDR: " << this << endl;
+			break;
+		}
 
 		XcpPacket* p = XcpPacket::newpkt(_flow, *_route, _highest_sent+1, _mss,
 						_cwnd, demand, _rtt);
@@ -527,11 +575,16 @@ XcpSrc::send_packets() {
 		_highest_sent += _mss;  //XX beware wrapping
 		_packets_sent += _mss;
 		
-		cout << "SENDON2" << endl;
+		cout << "SENDON2" << " ADDR: " << this << " INST QSIZE: " << _instantaneous_queuesize << endl;
 		p->sendOn();
+
 
 		if(_RFC2988_RTO_timeout == timeInf) {// RFC2988 5.1
 			_RFC2988_RTO_timeout = eventlist().now() + _rto;
+		}
+
+		if (c > _app_limited * timeAsSec(_rtt) / 8.0 && _instantaneous_queuesize == 0) {
+			c = _app_limited * timeAsSec(_rtt) / 8.0;
 		}
     }
 }
@@ -683,6 +736,14 @@ void XcpSrc::doNextEvent() {
 		//cout << "Starting flow" << endl;
 		startflow();
     }
+}
+
+mem_b XcpSrc::get_instantaneous_queuesize() const {
+	return _instantaneous_queuesize;
+}
+
+void XcpSrc::set_instantaneous_queue(mem_b size) {
+	_instantaneous_queuesize = size;
 }
 
 ////////////////////////////////////////////////////////////////

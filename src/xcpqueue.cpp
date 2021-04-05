@@ -211,7 +211,7 @@ XcpQueue::receivePacket(Packet& pkt)
 
 #ifdef MPXCP_VERSION_1
         cout << "BEFORE XCPCTL ADJUST" << endl;
-        cout << "addr: " << p << endl;
+        cout << "Packet addr: " << p << endl;
         cout << "MAX THROUGHPUT SIZE: " << _max_throughputs.size() << endl;
         for (auto it = _max_throughputs.begin() ; it != _max_throughputs.end() ; ) {
             cout << "it first: " << it->first << " it second: " << timeAsMs(it->second) << " Mean rtt: " << timeAsMs(_mean_rtt) << " Now: " << now << endl;;
@@ -229,7 +229,9 @@ XcpQueue::receivePacket(Packet& pkt)
                 break;
             }
         }
+        cout << max_throughput << endl;
         max_throughput += _rate_to_allocate;
+        cout << "rate to allocate: " << _rate_to_allocate << endl;
         cout << "AFTER XCPCTL ADJUST" << endl;
         cout << "MAX THROUGHPUT SIZE: " << _max_throughputs.size() << endl;
         cout << max_throughput << endl;

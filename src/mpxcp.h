@@ -49,6 +49,8 @@ public:
     void remove_src(XcpSrc* src);//
     linkspeed_bps update_total_throughput();
 
+    bool require_one_packet();
+
     virtual void receivePacket(Packet& pkt);
     virtual const string& nodename() { return _nodename; }
 
@@ -64,10 +66,19 @@ public:
 private:
     void collect_garbage();//
     simtime_picosec update_route_update_interval();//
+    void update_queue_size();
+    void update_tuning();
+    simtime_picosec get_max_rtt_of_subflows() const;
 
     static const int32_t MAX_THROUGHPUT;
     static const simtime_picosec MIN_ROUTE_UPDATE_INTERVAL;
     static XcpNetworkTopology* _network_topology;
+    static const size_t MAX_QUEUE_SIZE;
+
+    static const double TUNING_ALPHA;
+    static const double TUNING_BETA;
+    static const double TUNING_GAMMA;
+    static const double TUNING_DELTA;
 
     // Housekeeping
     MultipathXcpLogger* _logger;
@@ -80,6 +91,20 @@ private:
     vector<XcpSrc*> _garbage;
     size_t _active_routes;
     size_t _spare_routes;
+    size_t _size_in_queue;
+    simtime_picosec _queue_size_last_update_time;
+    linkspeed_bps _last_tuning;
+    linkspeed_bps _tuning;
+    size_t _declined_requests;
+    double _last_queue_buildup_speed;  // bits per second
+    double _queue_buildup_speed;  // bits per second
+    size_t _last_min_size_in_queue;
+    size_t _min_size_in_queue;
+    size_t _tolerate_queue_size;
+    size_t _sent_packet;
+
+    list<pair<size_t,simtime_picosec> > _min_queue_stat;
+    mem_b _virtual_queue_size;
 };
 
 // Must set _logfile and _eventlist before use

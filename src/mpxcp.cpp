@@ -10,6 +10,16 @@
 
 const int32_t MultipathXcpSrc::MAX_THROUGHPUT = INT32_MAX;
 const simtime_picosec MultipathXcpSrc::MIN_ROUTE_UPDATE_INTERVAL = 10000000000;
+const size_t MultipathXcpSrc::MAX_QUEUE_SIZE = -1;
+// const double MultipathXcpSrc::TUNING_ALPHA = 0.1;
+// const double MultipathXcpSrc::TUNING_BETA = 0.9;
+// const double MultipathXcpSrc::TUNING_GAMMA = 0.1;
+// const double MultipathXcpSrc::TUNING_DELTA = 0.1;
+const double MultipathXcpSrc::TUNING_ALPHA = 0.0;
+const double MultipathXcpSrc::TUNING_BETA = 0.0;
+const double MultipathXcpSrc::TUNING_GAMMA = 0.001;
+const double MultipathXcpSrc::TUNING_DELTA = 0.2;
+
 
 XcpNetworkTopology* MultipathXcpSrc::_network_topology = NULL;
 Logfile* MultipathXcpSrc::_logfile = NULL;
@@ -25,6 +35,18 @@ MultipathXcpSrc::MultipathXcpSrc(MultipathXcpLogger* logger, TrafficLogger* pktl
     _route_update_interval = MIN_ROUTE_UPDATE_INTERVAL;
     _active_routes = 0;
     _spare_routes = desired_spare_routes;
+    _size_in_queue = 0;
+    _queue_size_last_update_time = 0;
+    _last_min_size_in_queue = 0;
+    _min_size_in_queue = 0;
+    _last_tuning = 0;
+    _tuning = 0;
+    _declined_requests = 0;
+    _last_queue_buildup_speed = 0;
+    _queue_buildup_speed = 0;
+    _tolerate_queue_size = 10000;
+    _sent_packet = 0;
+    _virtual_queue_size = 0;
 }
 
 void MultipathXcpSrc::set_flowsize(uint64_t flow_size_in_bytes) {
@@ -33,6 +55,7 @@ void MultipathXcpSrc::set_flowsize(uint64_t flow_size_in_bytes) {
 
 void MultipathXcpSrc::set_app_limit(int pktps) {
     // pktps in packets/second
+    update_queue_size();
     _app_limited = static_cast<linkspeed_bps>(pktps) * static_cast<linkspeed_bps>(Packet::data_packet_size()) * static_cast<linkspeed_bps>(8);
 }
 
@@ -62,6 +85,9 @@ void MultipathXcpSrc::receivePacket(Packet& pkt) {
 }
 
 void MultipathXcpSrc::set_start_time(simtime_picosec time) {
+    _size_in_queue = 0;
+    _virtual_queue_size = 0;
+    _queue_size_last_update_time = time;
     eventlist().sourceIsPending(*this,time);
 }
 
@@ -70,7 +96,7 @@ void MultipathXcpSrc::set_sink(MultipathXcpSink* sink) {
 }
 
 void MultipathXcpSrc::doNextEvent() {
-    cout << "MPXCP DONEXTEVENT" << endl;
+    cout << "MPXCP DONEXTEVENT" << endl;   
 
     if(_flow_started) {
         collect_garbage();
@@ -151,8 +177,10 @@ void MultipathXcpSrc::update_subflow_list(size_t number_of_paths) {
 }
 
 void MultipathXcpSrc::adjust_subflow_throughput() {
+    update_queue_size();
+    //update_tuning();
     cout << "ADJUSTING SUBFLOW THROUGHPUT" << endl;
-    int64_t remaining_throughput = _app_limited;
+    int64_t remaining_throughput = _app_limited;// + _tuning;
 
     cout << remaining_throughput << endl;
 
@@ -184,7 +212,51 @@ void MultipathXcpSrc::adjust_subflow_throughput() {
 */
         cout << "REMAINING TP: " << remaining_throughput << endl;
     }
+/*
+    for (auto src : _subflows) {
+        double set_throughput = src.second->route_max_throughput();
+        cout << this << " Max Throughput: " << set_throughput << endl;
+        if (remaining_throughput < set_throughput) {
+            double diff = set_throughput - remaining_throughput;
+            if (src.second->rtt()) {
+                double queue_induced_throughput = queue_size / timeAsSec(src.second->rtt()) * 8.0;
+                if (diff < queue_induced_throughput) {
+                    queue_size -= diff * timeAsSec(src.second->rtt()) / 8.0;
+                } else {
+                    queue_size = 0;
+                    diff = queue_induced_throughput;
+                }
+            } else {
+                diff = 0;
+            }
+            set_throughput = remaining_throughput + diff;
+        }
+        remaining_throughput -= set_throughput;
+        cout << src.second << " Setting TP: " << set_throughput << endl;
 
+        src.second->set_app_limit(set_throughput);
+
+        if (eventlist().now() < timeFromSec(10)) {
+            if (src.first.rtt() == timeFromMs(42)) {
+                src.second->set_app_limit(1250);
+            } else {
+                src.second->set_app_limit(250);
+            }
+        }
+        else {
+            if (src.first.rtt() == timeFromMs(42)) {
+                src.second->set_app_limit(625);
+            } else {
+                src.second->set_app_limit(875);
+            }
+        }
+
+        if (remaining_throughput < 0) {
+            remaining_throughput = 0;
+        }
+        cout << "REMAINING TP: " << remaining_throughput << endl;
+    }
+*/
 /*
     for (auto src : _subflows) {
         cout << "GET SUBFLOW TP" << endl;
@@ -238,7 +310,7 @@ void MultipathXcpSrc::adjust_subflow_throughput() {
     }
 */
     cout << "FINISH ADJUSTING THROUGHPUT" << endl;
-
+    update_tuning();
 }
 
 XcpSrc* MultipathXcpSrc::create_new_src() {
@@ -312,6 +384,222 @@ linkspeed_bps MultipathXcpSrc::update_total_throughput() {
     }
 
     return _total_throughput;
+}
+
+bool MultipathXcpSrc::require_one_packet() {
+    //return true;
+    _virtual_queue_size -= Packet::data_packet_size();
+    update_queue_size();
+
+    if (_size_in_queue > Packet::data_packet_size()) {
+        _size_in_queue -= Packet::data_packet_size();
+        ++_sent_packet;
+        if (_size_in_queue < _last_min_size_in_queue) {
+            cout << "MPXCP SRC ADDR: " << this << " SHRINK QUEUE TIME: " << timeAsMs(eventlist().now()) << " QUEUE SIZE: " << _size_in_queue << endl;
+        }
+        cout << "MPXCP XCP ADDR: " << this << " DEPATCH A PACKET TIME: " << timeAsMs(eventlist().now()) << " QUEUE SIZE: " << _size_in_queue << " VIRTUAL QUEUESIZE: " << _min_size_in_queue << endl;
+        return true;
+    } else {
+        ++_declined_requests;
+        return false;
+    }
+}
+
+void MultipathXcpSrc::update_queue_size() {
+    if (_min_size_in_queue > _size_in_queue) {
+        _min_size_in_queue = _size_in_queue;
+    }
+
+    simtime_picosec now = eventlist().now();
+    if (now < _queue_size_last_update_time) {
+        return;
+    }
+
+    simtime_picosec diff = now - _queue_size_last_update_time;
+
+    size_t bytes = _app_limited * timeAsSec(diff) / 8.0;
+
+    if (_size_in_queue > MAX_QUEUE_SIZE - bytes) {
+        _size_in_queue = MAX_QUEUE_SIZE;
+    } else {
+        _size_in_queue += bytes;
+        _virtual_queue_size += bytes;
+    }
+
+    _queue_size_last_update_time = now;
+
+    cout << "MPXCP SRC ADDR: " << this << " QUEUESIZE: " << _size_in_queue << " VIRTUAL QSIZE: " << _virtual_queue_size << " TIME: " << timeAsMs(now) << endl;
+}
+
+void MultipathXcpSrc::update_tuning() {
+    cout << "MPXCP SRC ADDR: " << this << " SENT PACKET: "<< _sent_packet << " NOW: " << timeAsMs(eventlist().now()) << endl;;
+    cout << "DECLINED: " << _declined_requests << endl;
+
+    while (!_min_queue_stat.empty() && _min_queue_stat.back().first > _min_size_in_queue) {
+        _min_queue_stat.pop_back();
+    }
+    _min_queue_stat.push_back(make_pair(_min_size_in_queue,eventlist().now()));
+
+    for (auto s : _min_queue_stat) {
+        cout << "FIRST: " << s.first << " SECOND: " << timeAsMs(s.second) << endl;
+    }
+    for (auto src: _subflows) {
+        cout << "CHILDREN ADDR: " << src.second << " INST QSIZE BEFORE: " << src.second->get_instantaneous_queuesize() << endl;
+    }
+
+    for (auto it = _min_queue_stat.begin() ; it != _min_queue_stat.end() ; ++it) {
+        cout << "IT++" << endl;
+        if (it->second + get_max_rtt_of_subflows() > eventlist().now()) {
+            if (it == _min_queue_stat.begin()) {
+                break;
+            }
+            auto it2 = it;
+            --it2;
+            mem_b persistent_queue = it2->first;
+            persistent_queue /= Packet::data_packet_size();
+            persistent_queue *= Packet::data_packet_size();
+
+            cout << "MPXCP SRC ADDR: " << this << " TOTAL INST QUEUE: " << persistent_queue << " QUEUE TIME: " << timeAsMs(it2->second) << " NOW: " << timeAsMs(eventlist().now()) << endl;
+
+            for (auto src : _subflows) {
+                mem_b qs = (src.second->route_max_throughput() > src.second->get_app_limit() ? src.second->route_max_throughput() - src.second->get_app_limit() : 0);
+                cout << "DIFF: " << qs << " ADDR: " << src.second << " NOW: " << timeAsMs(eventlist().now()) << endl;
+                qs *= timeAsSec(src.second->rtt());
+                qs /= Packet::data_packet_size();
+                qs *= Packet::data_packet_size();
+                if (qs > persistent_queue) {
+                    qs = persistent_queue;
+                }
+                src.second->set_instantaneous_queue(qs);
+                persistent_queue -= qs;
+
+                cout << "XCP SRC ADDR: " << src.second << " INST SIZE AFTER: " << qs << endl;
+                if (persistent_queue <= 0) {
+                    break;
+                }
+            }
+
+            _min_queue_stat.erase(_min_queue_stat.begin(),it);
+            break;
+        }
+    }
+
+    _last_min_size_in_queue = _min_size_in_queue;
+    _min_size_in_queue = _size_in_queue;
+    _declined_requests = 0;
+    _sent_packet = 0;
+    return;
+
+
+    cout << "MPXCP SRC ADDR: " << this << " LAST TUNING: " << _last_tuning << " LAST QUEUESIZE: " << _last_min_size_in_queue << " ROUTE UPDATE INTERVAL: " << _route_update_interval << " SENT PACKET: "<< _sent_packet << " NOW: " << timeAsMs(eventlist().now()) << endl;;
+    if (_route_update_interval) {
+/*
+        _queue_buildup_speed = (static_cast<double>(_size_in_queue) - static_cast<double>(_last_size_in_queue) - static_cast<double>(_declined_requests * Packet::data_packet_size())) * 8.0 / timeAsSec(_route_update_interval);
+        cout << "Last Queue build speed: " << _last_queue_buildup_speed << " New queue build speed: " << (static_cast<double>(_size_in_queue) - static_cast<double>(_last_size_in_queue) - static_cast<double>(_declined_requests * Packet::data_packet_size())) * 8.0 / timeAsSec(_route_update_interval) << endl;
+        cout << "DECLINED: " << _declined_requests << endl;
+    
+        double ans = TUNING_ALPHA * _queue_buildup_speed;
+        cout << TUNING_ALPHA * _queue_buildup_speed << endl;
+        
+        ans += TUNING_BETA * _last_tuning;
+        cout << TUNING_BETA * _last_tuning << endl;
+
+        ans += TUNING_GAMMA * (_queue_buildup_speed - _last_queue_buildup_speed);
+        cout << TUNING_GAMMA * (_queue_buildup_speed - _last_queue_buildup_speed) << endl;
+
+        ans += TUNING_DELTA * _size_in_queue * 8.0 / timeAsSec(_route_update_interval);
+        cout << TUNING_DELTA * _size_in_queue * 8.0 / timeAsSec(_route_update_interval) << endl;
+
+        if (ans < 0) {
+            cout << "ANS < 0" << endl;
+            ans = 0;
+        }
+        _tuning = ans;
+        _last_tuning = _tuning;
+        _last_size_in_queue = _size_in_queue;
+        _last_queue_buildup_speed = _queue_buildup_speed;
+        _declined_requests = 0;
+*/
+/*
+        _queue_buildup_speed = (static_cast<double>(_size_in_queue) - static_cast<double>(_last_size_in_queue) - static_cast<double>(_declined_requests * Packet::data_packet_size())) * 8.0 / timeAsSec(_route_update_interval);
+        cout << "Last Queue build speed: " << _last_queue_buildup_speed << " New queue build speed: " << _queue_buildup_speed << endl;
+        //_queue_buildup_speed = (1 - TUNING_DELTA) * _last_queue_buildup_speed + TUNING_DELTA * _queue_buildup_speed;
+        cout << "Smoothed speed: " << _queue_buildup_speed << endl;
+        cout << "DECLINED: " << _declined_requests << endl;
+
+        double ans = TUNING_ALPHA * _queue_buildup_speed;
+        cout << TUNING_ALPHA * _queue_buildup_speed << endl;
+
+        ans += TUNING_BETA * (_queue_buildup_speed - _last_queue_buildup_speed);
+        cout << TUNING_BETA * (_queue_buildup_speed - _last_queue_buildup_speed) << endl;
+
+        //double queue_size = (1 - TUNING_DELTA) * _last_size_in_queue + TUNING_DELTA * _size_in_queue;
+        double queue_size = _size_in_queue;
+        ans += TUNING_GAMMA * queue_size * 8.0 / timeAsSec(_route_update_interval);
+        cout << TUNING_GAMMA * queue_size * 8.0 / timeAsSec(_route_update_interval) << endl;
+
+        if (ans < 0) {
+            cout << "ANS < 0" << endl;
+            ans = 0;
+        }
+
+        _tuning = ans;
+        _last_tuning = _tuning;
+        _last_queue_buildup_speed = _queue_buildup_speed;
+        _last_size_in_queue = queue_size;
+        _declined_requests = 0;
+*/
+        cout << "DECLINED: " << _declined_requests << endl;
+        double ans = 0;
+        for (auto src : _subflows) {
+            linkspeed_bps target = src.second->get_app_limit();
+            linkspeed_bps reality = src.second->throughput();
+
+            if (target > reality) {
+                double temp = target - reality;
+                if (temp > TUNING_GAMMA * target) {
+                    temp = TUNING_GAMMA * target;
+                }
+                ans += temp;
+
+                cout << "DIFF 1: " << target - reality << " TARGET: " << target << " REALITY: " << reality << " subflow addr: " << src.second << " NOW: " << timeAsMs(eventlist().now()) << endl;
+                cout << "DIFF 2: " << temp << endl;
+            }
+        }
+        cout << "DIFFERENCE: " << ans << endl;
+        ans *= TUNING_ALPHA;
+        if (_min_size_in_queue > _tolerate_queue_size) {
+            ans += TUNING_BETA * (_min_size_in_queue - _tolerate_queue_size) * 8.0 / timeAsSec(_route_update_interval);
+            cout << "INSTANANEOUS: " << TUNING_BETA * (_min_size_in_queue - _tolerate_queue_size) * 8.0 / timeAsSec(_route_update_interval) << endl;
+        }
+
+        cout << "QUEUESIZE: " << _min_size_in_queue << endl;
+
+        _tuning = ans;
+        _last_tuning = _tuning;
+
+        _last_min_size_in_queue = _min_size_in_queue;
+        _min_size_in_queue = _size_in_queue;
+
+        _declined_requests = 0;
+        _sent_packet = 0;
+
+        //_tuning = 0;
+    }
+    cout << "NEW TUNING: " << _tuning << " NEW QUEUESIZE: " << _min_size_in_queue << endl;
+}
+
+simtime_picosec MultipathXcpSrc::get_max_rtt_of_subflows() const {
+    auto it = _subflows.end();
+    for (--it ; ; --it) {
+        if (it->second->get_app_limit() != 0 || it->second->get_instantaneous_queuesize() != 0) {
+            return (it->second->rtt() > 0 ? it->second->rtt() : it->first.rtt());
+        }
+        if (it == _subflows.begin()) {
+            return 0;
+        }
+    }
+    return 0;
 }
 
 ////////////////////////////////////////////////////////////////

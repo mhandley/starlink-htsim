@@ -52,6 +52,7 @@ class XcpSrc : public PacketSink, public EventSource {
     //uint32_t effective_window();
     virtual void rtx_timer_hook(simtime_picosec now,simtime_picosec period);
     virtual const string& nodename() { return _nodename; }
+    simtime_picosec rtt() const {return _rtt;}
 
     // should really be private, but loggers want to see:
     uint64_t _highest_sent;  //seqno is in bytes
@@ -94,6 +95,7 @@ class XcpSrc : public PacketSink, public EventSource {
 
     void set_app_limit(int pktps);
     void set_app_limit(double bitsps);
+    linkspeed_bps get_app_limit() const {return _app_limited;}
 
     const Route* _route;
     //simtime_picosec _last_ping;
@@ -101,12 +103,16 @@ class XcpSrc : public PacketSink, public EventSource {
 	
     int _subflow_id;
 
+    void set_instantaneous_queue(mem_b size);
+    mem_b get_instantaneous_queuesize() const;
+
     //virtual void inflate_window();
     //virtual void deflate_window();
 
  private:
     static const size_t START_PACKET_NUMBER = 2;
     static const int32_t MAX_THROUGHPUT = INT32_MAX - 1;
+    static const double THROUGHPUT_TUNING_P;
 
     const Route* _old_route;
     uint64_t _last_packet_with_old_route;
@@ -129,6 +135,11 @@ class XcpSrc : public PacketSink, public EventSource {
     string _nodename;
 
     MultipathXcpSrc* _mpxcp_src;
+    mem_b _instantaneous_queuesize;
+    mem_b _instantaneous_sent;
+    mem_b _persistent_sent;
+
+    simtime_picosec _last_rtt_start_time;
 };
 
 class XcpSink : public PacketSink, public DataReceiver, public Logged {
