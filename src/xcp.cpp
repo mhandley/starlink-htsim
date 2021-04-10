@@ -72,6 +72,9 @@ XcpSrc::XcpSrc(XcpLogger* logger, TrafficLogger* pktlogger,
 	_instantaneous_sent = 0;
 	_persistent_sent = 0;
 	_last_rtt_start_time = 0;
+	_last_tuning_queue_size = 0;
+	_last_tuning_start_time = 0;
+	_can_update_last_tuning_stat = true;
 }
 
 #ifdef PACKET_SCATTER
@@ -95,8 +98,9 @@ void XcpSrc::set_app_limit(int pktps) {
 		_cwnd = START_PACKET_NUMBER * _mss;
     }
     _ssthresh = 0xffffffff;
+	linkspeed_bps old_limit = _app_limited;
     _app_limited = static_cast<linkspeed_bps>(pktps) * static_cast<linkspeed_bps>(Packet::data_packet_size()) * static_cast<linkspeed_bps>(8);
-	if (_established) {
+	if (_established && old_limit < _app_limited) {
     	send_packets();
 	}
 }
@@ -111,8 +115,9 @@ void XcpSrc::set_app_limit(double bitsps) {
 		_cwnd = START_PACKET_NUMBER * _mss;
 	}
 	_ssthresh = 0xffffffff;
+	linkspeed_bps old_limit = _app_limited;
     _app_limited = bitsps;
-	if (_established) {
+	if (_established && old_limit < _app_limited) {
     	send_packets();
 	}
 }
@@ -147,10 +152,16 @@ linkspeed_bps XcpSrc::throughput() const {
 	if (_rtt == 0) {
 		return 0;
 	}
-	linkspeed_bps ans = _cwnd * 8;
+
+	uint32_t c = _cwnd;
+	if (_app_limited * timeAsSec(_rtt) / 8 < _cwnd) {
+		c = _app_limited * timeAsSec(_rtt) / 8;
+	}
+
+	linkspeed_bps ans = c / Packet::data_packet_size() * Packet::data_packet_size() * 8;
 	ans /= timeAsSec(_rtt);
 
-	cout << "ADDR: " << this << " CWND: " << _cwnd << " NOW: " << timeAsMs(eventlist().now()) << endl;
+	cout << "ADDR: " << this << " CWND: " << _cwnd << " REAL C: " << c << " NOW: " << timeAsMs(eventlist().now()) << endl;
 	cout << "COMPUTING THROUGHPUT: " << ans << endl;
 
 	return ans;
@@ -468,10 +479,20 @@ void
 XcpSrc::send_packets() {
 	cout << "SRC sending packet" << endl;
 
+	if (_instantaneous_queuesize > _last_tuning_queue_size || ((_last_tuning_start_time + _rtt < eventlist().now()) && _can_update_last_tuning_stat)) {
+		cout << this << " UPDATING last tuning queue size: " << _last_tuning_queue_size << " now tuning: " << _instantaneous_queuesize << " NOW: " << timeAsMs(eventlist().now()) << endl;
+		_last_tuning_queue_size = _instantaneous_queuesize;
+		//_last_tuning_start_time = eventlist().now();
+		_instantaneous_sent = 0;
+		_persistent_sent = 0;
+		//_last_tuning_start_time = 0;
+	}
+
 	double demand = MAX_THROUGHPUT;
 
 	if (_rtt != 0) {
-		demand = _app_limited * timeAsSec(_rtt) / 8 + _instantaneous_queuesize - _cwnd;
+		demand = _app_limited * timeAsSec(_rtt) / 8 + _last_tuning_queue_size - _cwnd;
+		//demand = _app_limited * timeAsSec(_rtt) / 8 + _instantaneous_queuesize - _cwnd;
 	}
 
 	cout << "DEMAND 2: " << demand << " RTT: " << timeAsSec(_rtt) << endl;;
@@ -479,18 +500,22 @@ XcpSrc::send_packets() {
 	if (demand <= 0) {
 		cout << "BEFORE CHANGING CWND: " << _cwnd << endl;
 		demand = 0;
-		if (_last_rtt_start_time + _rtt < eventlist().now()) {
-			_cwnd = _cwnd * (1.0 - THROUGHPUT_TUNING_P) + (_app_limited * timeAsSec(_rtt) / 8 + _instantaneous_queuesize) * THROUGHPUT_TUNING_P;
+		//if (_last_rtt_start_time + _rtt < eventlist().now()) {
+			//_cwnd = _cwnd * (1.0 - THROUGHPUT_TUNING_P) + (_app_limited * timeAsSec(_rtt) / 8 + _last_tuning_queue_size) * THROUGHPUT_TUNING_P;
+			//_cwnd = _cwnd * (1.0 - THROUGHPUT_TUNING_P) + (_app_limited * timeAsSec(_rtt) / 8 + _instantaneous_queuesize) * THROUGHPUT_TUNING_P;
+			_cwnd = (_app_limited * timeAsSec(_rtt) / 8 + _last_tuning_queue_size);
 			_last_rtt_start_time = eventlist().now();
 			cout << "AFTER CHANGING CWND: " << _cwnd << endl;
-		}
+		//}
 	}
 
 	int c = _cwnd;
 
-	if (_instantaneous_queuesize == 0 && _app_limited * timeAsSec(_rtt) / 8.0 < _cwnd) {
-		c = _app_limited * timeAsSec(_rtt) / 8.0;
+	if (_app_limited * timeAsSec(_rtt) / 8 + _last_tuning_queue_size < _cwnd) {
+		c = _app_limited * timeAsSec(_rtt) / 8 + _last_tuning_queue_size;
 	}
+
+	demand /= (c / Packet::data_packet_size());
 
 	if (demand >= MAX_THROUGHPUT) {
 		demand = MAX_THROUGHPUT;
@@ -532,8 +557,9 @@ XcpSrc::send_packets() {
     while ((_last_acked + c >= _highest_sent + _mss) 
 	   && (_highest_sent + _mss <= _flow_size + 1)) {
 
-		if (_instantaneous_queuesize > 0) {
-			double target_ratio = _app_limited * timeAsSec(_rtt) / 8.0 / _cwnd;
+		    bool sent_inst = false;
+		//if (_instantaneous_queuesize > 0) {
+			double target_ratio = _app_limited * timeAsSec(_rtt) / 8.0 / c;
 			target_ratio = target_ratio / (1.0 - target_ratio);
 
 			cout << this << " TARGET RATIO: " << target_ratio << endl;
@@ -547,22 +573,41 @@ XcpSrc::send_packets() {
 					_instantaneous_sent += _mss;
 					_instantaneous_queuesize -= _mss;
 
+					_can_update_last_tuning_stat = false;
+					sent_inst = true;
 					cout << this << " REQUESTING INSTANTANEOUS PACKET REMAINING: " << _instantaneous_queuesize << " NOW: " << timeAsMs(eventlist().now()) << endl;
 				} else {
 					_persistent_sent += _mss;
+					
+					real_ratio = static_cast<double>(_persistent_sent) / static_cast<double>(_instantaneous_sent);
+					if (real_ratio > target_ratio) {
+						_can_update_last_tuning_stat = true;
+					}
 				}
+			} else {
+				_can_update_last_tuning_stat = true;
 			}
-		} else {
+		//}
+
+		_can_update_last_tuning_stat = true;
+
+		if (_instantaneous_queuesize <= 0) {
 			cout << "INSTANTANEOUS QSIZE IS ZERO" << endl;
 			_instantaneous_queuesize = 0;
-			_instantaneous_sent = 0;
-			_persistent_sent = 0;
+			if (_can_update_last_tuning_stat) {
+				//_instantaneous_sent = 0;
+				//_persistent_sent = 0;
+				//_last_tuning_queue_size = 0;
+			}
 		}
 
-		if (_mpxcp_src && !_mpxcp_src->require_one_packet()) {
-			_instantaneous_queuesize = 0;
-			_instantaneous_sent = 0;
-			_persistent_sent = 0;
+		if (_mpxcp_src && !_mpxcp_src->require_one_packet(_instantaneous_queuesize <= 0 && _last_tuning_queue_size > 0)) {
+			if (sent_inst || _can_update_last_tuning_stat) {
+				_instantaneous_queuesize = 0;
+				_instantaneous_sent = 0;
+				_persistent_sent = 0;
+				_last_tuning_queue_size = 0;
+			}
 			cout << "GOT DECLINED ADDR: " << this << endl;
 			break;
 		}
@@ -583,8 +628,8 @@ XcpSrc::send_packets() {
 			_RFC2988_RTO_timeout = eventlist().now() + _rto;
 		}
 
-		if (c > _app_limited * timeAsSec(_rtt) / 8.0 && _instantaneous_queuesize == 0) {
-			c = _app_limited * timeAsSec(_rtt) / 8.0;
+		if (c > _app_limited * timeAsSec(_rtt) / 8.0 + _last_tuning_queue_size) {
+			c = _app_limited * timeAsSec(_rtt) / 8.0 + _last_tuning_queue_size;
 		}
     }
 }
@@ -743,7 +788,15 @@ mem_b XcpSrc::get_instantaneous_queuesize() const {
 }
 
 void XcpSrc::set_instantaneous_queue(mem_b size) {
+	if (size == 0) {
+		//_instantaneous_queuesize = 0;
+		_instantaneous_sent = 0;
+		_persistent_sent = 0;
+		_last_tuning_queue_size = 0;
+	}
 	_instantaneous_queuesize = size;
+	//_last_tuning_start_time = 0;
+	_last_tuning_start_time = (1ul << 60);
 }
 
 ////////////////////////////////////////////////////////////////

@@ -140,6 +140,10 @@ class XcpSrc : public PacketSink, public EventSource {
     mem_b _persistent_sent;
 
     simtime_picosec _last_rtt_start_time;
+
+    simtime_picosec _last_tuning_start_time;
+    mem_b _last_tuning_queue_size;
+    bool _can_update_last_tuning_stat;
 };
 
 class XcpSink : public PacketSink, public DataReceiver, public Logged {

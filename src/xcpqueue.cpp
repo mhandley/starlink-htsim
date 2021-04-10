@@ -72,7 +72,7 @@ XcpQueue::receivePacket(Packet& pkt)
 			_mean_bitrate = _bytes_forwarded * 8 * timeFromSec(1) / (now - _last_update);
 		// }
 
-        cout << timeAsMs(now) << " bitrate: " << _mean_bitrate << " bytes " << _bytes_forwarded << endl;
+        cout << this << " NOW: " << timeAsMs(now) << " bitrate: " << _mean_bitrate << " bytes: " << _bytes_forwarded << endl;
         _control_interval = _mean_rtt;
 		if (_control_interval < MIN_IDLE_INTERVAL) {
 			_control_interval = MIN_IDLE_INTERVAL;
@@ -214,7 +214,7 @@ XcpQueue::receivePacket(Packet& pkt)
         cout << "Packet addr: " << p << endl;
         cout << "MAX THROUGHPUT SIZE: " << _max_throughputs.size() << endl;
         for (auto it = _max_throughputs.begin() ; it != _max_throughputs.end() ; ) {
-            cout << "it first: " << it->first << " it second: " << timeAsMs(it->second) << " Mean rtt: " << timeAsMs(_mean_rtt) << " Now: " << now << endl;;
+            cout << "it first: " << it->first << " it second: " << timeAsMs(it->second) << " Mean rtt: " << timeAsMs(_mean_rtt) << " Now: " << timeAsMs(now) << endl;;
             if (it->second + _mean_rtt < now) {
                 cout << "ERASED" << endl;
                 _max_throughputs.erase(it++);

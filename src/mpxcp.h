@@ -49,7 +49,7 @@ public:
     void remove_src(XcpSrc* src);//
     linkspeed_bps update_total_throughput();
 
-    bool require_one_packet();
+    bool require_one_packet(bool request_update_inst_queue = false);
 
     virtual void receivePacket(Packet& pkt);
     virtual const string& nodename() { return _nodename; }
@@ -68,6 +68,7 @@ private:
     simtime_picosec update_route_update_interval();//
     void update_queue_size();
     void update_tuning();
+    void assign_instantaneous_queue();
     simtime_picosec get_max_rtt_of_subflows() const;
 
     static const int32_t MAX_THROUGHPUT;
@@ -105,6 +106,8 @@ private:
 
     list<pair<size_t,simtime_picosec> > _min_queue_stat;
     mem_b _virtual_queue_size;
+
+    size_t _accumulate_size_in_queue;
 };
 
 // Must set _logfile and _eventlist before use
