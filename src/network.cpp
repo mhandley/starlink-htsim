@@ -62,6 +62,7 @@ Packet::sendOn() {
 	    nextsink = _route->reverse()->at(_nexthop);
 	    _nexthop++;
 	} else {
+        cout << "Route addr: " << _route << endl;
         cout << "NEXTHOP: " << _nexthop << " ROUTE SIZE: " << _route->size() << endl;
 	    assert(_nexthop<_route->size());
 	    nextsink = _route->at(_nexthop);

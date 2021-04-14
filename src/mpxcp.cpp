@@ -119,12 +119,16 @@ void MultipathXcpSrc::doNextEvent() {
 }
 
 void MultipathXcpSrc::update_subflow_list(size_t number_of_paths) {
-    cout << "Updating Subflow List" << nodename() << endl;
-    if (!_network_topology->changed() && number_of_paths < _subflows.size()) {
+    cout << "Updating Subflow List" << nodename() << " Number of paths: " << number_of_paths << endl;
+    if (!_network_topology->changed() && number_of_paths <= _subflows.size()) {
         return;
     } else {
         map<XcpRouteInfo,XcpSrc*> old_subflows = std::move(_subflows);
-        _subflows = _network_topology->get_paths(this,_sink, number_of_paths);
+        simtime_picosec min_rtt = 0;
+        if (!old_subflows.empty()) {
+            min_rtt = old_subflows.begin()->second->rtt();
+        }
+        _subflows = _network_topology->get_paths(this,_sink, eventlist().now() + min_rtt, number_of_paths);
 
         cout << "GET PATH SUCCESSFUL" << endl;
 
@@ -174,6 +178,7 @@ void MultipathXcpSrc::update_subflow_list(size_t number_of_paths) {
             if (src.first.rtt() > max_rtt) {
                 max_rtt = src.first.rtt();
             }
+            cout << "Garbage push back: " << src.second << " Route addr: " << src.second->_route << " NOW: " << timeAsMs(eventlist().now()) << endl;
             _garbage.push_back(src.second);
         }
 
@@ -374,17 +379,21 @@ void MultipathXcpSrc::collect_garbage() {
             if (src->_route->is_using_refcount()) {
                 src->_route->decr_refcount();
             } else {
+                cout << "Deleting -> route: " << src->_route << endl;
                 delete src->_route;
             }
             if (src->_sink->_route->is_using_refcount()) {
                 src->_sink->_route->decr_refcount();
             } else {
+                cout << "Deleting <- route: " << src->_sink->_route << endl;
                 delete src->_sink->_route;
             }
 
             _sink->remove_sink(src->_sink);
             remove_src(src);
         }
+
+        _garbage.clear();
 
         _garbage_collection_time = 0;
     }
@@ -720,12 +729,14 @@ void MultipathXcpSrc::assign_instantaneous_queue() {
 
 simtime_picosec MultipathXcpSrc::get_max_rtt_of_subflows() const {
     auto it = _subflows.end();
-    for (--it ; ; --it) {
-        if (it->second->get_app_limit() != 0 || it->second->get_instantaneous_queuesize() != 0) {
-            return (it->second->rtt() > 0 ? it->second->rtt() : it->first.rtt());
-        }
-        if (it == _subflows.begin()) {
-            return 0;
+    if (it != _subflows.begin()) {
+        for (--it ; ; --it) {
+            if (it->second->get_app_limit() != 0 || it->second->get_instantaneous_queuesize() != 0) {
+                return (it->second->rtt() > 0 ? it->second->rtt() : it->first.rtt());
+            }
+            if (it == _subflows.begin()) {
+                return 0;
+            }
         }
     }
     return 0;

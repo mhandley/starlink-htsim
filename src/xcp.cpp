@@ -94,7 +94,8 @@ void XcpSrc::set_paths(vector<const Route*>* rt) {
 
 void XcpSrc::set_app_limit(int pktps) {
 	// pktps in packets/second
-    if (_app_limited==0 && pktps){
+    //if (_app_limited==0 && pktps && _cwnd == 0){
+	if (_cwnd <= START_PACKET_NUMBER * _mss) {
 		_cwnd = START_PACKET_NUMBER * _mss;
     }
     _ssthresh = 0xffffffff;
@@ -109,15 +110,17 @@ void XcpSrc::set_app_limit(double bitsps) {
 	static const double zero = 0.99;
 	if (bitsps <= 0) {
 		bitsps = 0;
-		_cwnd = 0;
+		//_cwnd = 0;
 	}
-	if (_app_limited == 0 && bitsps > zero) {
+	uint32_t old_cwnd = _cwnd;
+	//if (_app_limited == 0 && bitsps > zero) {
+	if (_cwnd <= START_PACKET_NUMBER * _mss) {
 		_cwnd = START_PACKET_NUMBER * _mss;
 	}
 	_ssthresh = 0xffffffff;
 	linkspeed_bps old_limit = _app_limited;
     _app_limited = bitsps;
-	if (_established && old_limit < _app_limited) {
+	if (_established && (old_limit < _app_limited || old_cwnd <= START_PACKET_NUMBER * _mss)) {
     	send_packets();
 	}
 }
@@ -564,7 +567,7 @@ XcpSrc::send_packets() {
 
 			cout << this << " TARGET RATIO: " << target_ratio << endl;
 
-			if (target_ratio > 0) {
+			if (target_ratio >= 0) {
 				double real_ratio = static_cast<double>(_persistent_sent) / static_cast<double>(_instantaneous_sent);
 
 				cout << this << " REAL RATIO: " << real_ratio << " PS: " << _persistent_sent << " IS: " << _instantaneous_sent << endl;

@@ -50,7 +50,7 @@ Route::decr_refcount() const {
 	_refcount--;
 	//cout << this << "decr_refcount, now " << _refcount << endl;
 	if (_refcount == 0) {
-	    cout << "FREEING ROUTE" << endl;
+	    cout << "FREEING ROUTE: " << this << endl;
 	    delete(this);
 	    return;
 	}

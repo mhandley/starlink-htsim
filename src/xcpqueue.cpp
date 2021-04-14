@@ -202,7 +202,8 @@ XcpQueue::receivePacket(Packet& pkt)
 			_epsilon_n = 0;
 		}
 
-        cout << "Queuesize: " << queuesize() << " My NAME: " << _nodename << " Address: " << this << " Destination: " << dynamic_cast<XcpSink*>(*(--(pkt.route()->end())))->str() << " Feedback: " << xcp_pkt->demand() << " Seqno: " << xcp_pkt->seqno() << " Next Hop: " << xcp_pkt->nexthop() << endl;
+        cout << "Packet route addr: " << pkt.route() << endl;
+        cout << "Queuesize: " << queuesize() << " My NAME: " << _nodename << " Address: " << this << " Destination: " << dynamic_cast<XcpSink*>(*(--(pkt.route()->end())))->str() << " Feedback: " << xcp_pkt->demand() << " Seqno: " << xcp_pkt->seqno() << " Next Hop: " << xcp_pkt->nexthop() << " Now: " << timeAsMs(eventlist().now()) << endl;
     }
 
     if (pkt.type() == XCPCTL) {
