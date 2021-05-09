@@ -5,7 +5,7 @@
 ////////////////////////////////////////////////////////////////
 
 std::ostream& operator<< (std::ostream& os, const XcpRouteInfo& obj) {
-    os << obj._rtt << " ";
+    os << obj._rtt << " " << &obj << " ";
     for (auto it = obj._route->begin() ; it != obj._route->end() ; ++it) {
         os << *it << " ";
     }
@@ -60,7 +60,8 @@ const bool XcpRouteInfo::operator < (const XcpRouteInfo &rhs) const {
 }
 
 const bool XcpRouteInfo::operator == (const XcpRouteInfo &rhs) const {
-    if (_rtt == rhs.rtt()) {
+    if (_route->size() < 2 + rhs.route()->size() && _route->size() + 2 > rhs.route()->size()) {
+        //_rtt == rhs.rtt()
         auto it1 = _route->begin();
         auto it2 = rhs.route()->begin();
         for ( ; it1 != _route->end() && it2 != rhs.route()->end() ; ++it1,++it2) {
@@ -68,9 +69,9 @@ const bool XcpRouteInfo::operator == (const XcpRouteInfo &rhs) const {
                 return false;
             }
         }
-        if (it1 != _route->end() || it2 != rhs.route()->end()) {
-            return false;
-        }
+        // if (it1 != _route->end() || it2 != rhs.route()->end()) {
+        //     return false;
+        // }
         return true;
     }
     return false;

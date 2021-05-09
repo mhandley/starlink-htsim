@@ -19,7 +19,7 @@ Route::add_endpoints(PacketSink *src, PacketSink* dst) {
 }
 
 bool Route::is_using_refcount() const {
-    return _refcount == REFCOUNT_UNUSED;
+    return _refcount != REFCOUNT_UNUSED;
 }
 
 // refcount functions are const, but actually modify refcount.  This
@@ -45,7 +45,7 @@ Route::decr_refcount() const {
     //cout << this << "decr_refcount" << endl;
     assert(_refcount < 100000);
     if (_refcount != REFCOUNT_UNUSED) {
-        cout << "DECREASING REFCOUNT" << endl;
+        cout << "DECREASING REFCOUNT: " << this << endl;
 	assert(_refcount > 0);
 	_refcount--;
 	//cout << this << "decr_refcount, now " << _refcount << endl;

@@ -8,6 +8,15 @@
 //  MPXCP SOURCE
 ////////////////////////////////////////////////////////////////
 
+static map<XcpRouteInfo,XcpSrc*>::const_iterator search(const map<XcpRouteInfo,XcpSrc*> &old_subflows, const XcpRouteInfo &info) {
+    for (auto it = old_subflows.begin() ; it != old_subflows.end() ; ++it) {
+        if (it->first == info) {
+            return it;
+        }
+    }
+    return old_subflows.end();
+} 
+
 const int32_t MultipathXcpSrc::MAX_THROUGHPUT = INT32_MAX;
 const simtime_picosec MultipathXcpSrc::MIN_ROUTE_UPDATE_INTERVAL = 10000000000;
 const size_t MultipathXcpSrc::MAX_QUEUE_SIZE = -1;
@@ -48,6 +57,7 @@ MultipathXcpSrc::MultipathXcpSrc(MultipathXcpLogger* logger, TrafficLogger* pktl
     _sent_packet = 0;
     _virtual_queue_size = 0;
     _accumulate_size_in_queue = 0;
+    _garbage_collection_time = INT64_MAX;
 }
 
 void MultipathXcpSrc::set_flowsize(uint64_t flow_size_in_bytes) {
@@ -144,7 +154,8 @@ void MultipathXcpSrc::update_subflow_list(size_t number_of_paths) {
 
         for (auto src_it = _subflows.begin() ; src_it != _subflows.end() ; ++src_it) {
             //TODO
-            auto it = old_subflows.find(src_it->first);
+            //auto it = old_subflows.find(src_it->first);
+            auto it = search(old_subflows,src_it->first);
             if (it != old_subflows.end()) {
                 cout << "FOUND IN OLD SUBFLOW" << endl;
                 _subflows[src_it->first] = it->second;
@@ -175,14 +186,20 @@ void MultipathXcpSrc::update_subflow_list(size_t number_of_paths) {
 
         simtime_picosec max_rtt = 0;
         for (auto src : old_subflows) {
-            if (src.first.rtt() > max_rtt) {
-                max_rtt = src.first.rtt();
+            simtime_picosec rtt = (src.second->rtt() ? src.second->rtt() : src.first.rtt());
+            if (rtt > max_rtt) {
+                max_rtt = rtt;
             }
             cout << "Garbage push back: " << src.second << " Route addr: " << src.second->_route << " NOW: " << timeAsMs(eventlist().now()) << endl;
             _garbage.push_back(src.second);
+
+            src.second->set_flowsize(1);
         }
 
-        _garbage_collection_time = eventlist().now() + 2 * max_rtt;
+        if (_garbage_collection_time < eventlist().now() + 2 * max_rtt) {
+            _garbage_collection_time = eventlist().now() + 2 * max_rtt;
+        }
+        cout << "NEW GARBAGE COLLECTION TIME: " << _garbage_collection_time << " MAX RTT: " << max_rtt << endl;
     }
     cout << "FINISH UPDATING SUBFLOW LIST" << endl;
 }
@@ -373,7 +390,7 @@ void MultipathXcpSrc::remove_src(XcpSrc* src) {
 }
 
 void MultipathXcpSrc::collect_garbage() {
-    if (_garbage_collection_time > eventlist().now()) {
+    if (_garbage_collection_time < eventlist().now()) {
         cout << "GARBAGE COLLECTION: SIZE: " << _garbage.size() << endl;
         for (auto src : _garbage) {
             if (src->_route->is_using_refcount()) {
@@ -395,7 +412,7 @@ void MultipathXcpSrc::collect_garbage() {
 
         _garbage.clear();
 
-        _garbage_collection_time = 0;
+        _garbage_collection_time = INT64_MAX;
     }
 }
 

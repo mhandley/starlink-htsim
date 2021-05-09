@@ -6,7 +6,7 @@ XcpNetworkTopology::XcpNetworkTopology(EventList& eventlist,
 		  linkspeed_bps islbitrate, mem_b islqueuesize) : _constellation(eventlist,uplinkbitrate,uplinkqueuesize,downlinkbitrate,downlinkqueuesize,islbitrate,islqueuesize){}
 
 bool XcpNetworkTopology::changed() {
-    return false;
+    return true;
 }
 
 map<XcpRouteInfo,XcpSrc*> XcpNetworkTopology::get_paths(MultipathXcpSrc* src, MultipathXcpSink* sink, simtime_picosec time, size_t number) {
@@ -58,6 +58,8 @@ const Route* XcpNetworkTopology::get_return_route_from_info(const XcpRouteInfo &
             break;
         }
     }
+
+    ans->use_refcount();
 
     return ans;
 }
