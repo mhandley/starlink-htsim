@@ -1,6 +1,6 @@
 CC = g++
-CFLAGS = -Wall -g
-CRT=`pwd`
+CFLAGS = -Wall -g -D XCP_STATIC_NETWORK -D MPXCP_VERSION_1
+CRT="`pwd`"
 INCLUDE= -I/$(CRT)/.. -I$(CRT) 
 #-I$(CRT)/ksp -I$(CRT)/ksp/boost
 LIB=-L.. 
@@ -8,7 +8,7 @@ LIB=-L..
 
 HDRS=isl.h node.h satellite.h city.h constellation.h binary_heap.h
 
-all:	starlink xcp-test
+all:	starlink xcp-test main_static_network
 #htsim_ndp_incast_shortflows_demo 
 
 starlink:	main.o isl.o node.o satellite.o city.o constellation.o binary_heap.o ../libhtsim.a
@@ -17,8 +17,14 @@ starlink:	main.o isl.o node.o satellite.o city.o constellation.o binary_heap.o .
 xcp-test:	main-xcp-test.o ../libhtsim.a
 	$(CC) $(CFLAGS) main-xcp-test.o $(LIB) -lhtsim -o xcp-test
 
+main_static_network: main-static-network.o isl.o node.o satellite.o city.o constellation.o binary_heap.o ../libhtsim.a
+	$(CC) $(CFLAGS) main-static-network.o isl.o node.o satellite.o city.o constellation.o binary_heap.o $(LIB) -lhtsim -o main_static_network
+
 main.o: main.cpp $(HDRS)
 	$(CC) $(INCLUDE) $(CFLAGS) -c main.cpp 
+
+main-static-network.o: main-static-network.cpp $(HDRS)
+	$(CC) $(INCLUDE) $(CFLAGS) -c main-static-network.cpp
 
 main-xcp-test.o: main-xcp-test.cpp $(HDRS)
 	$(CC) $(INCLUDE) $(CFLAGS) -c main-xcp-test.cpp 

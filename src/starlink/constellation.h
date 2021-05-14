@@ -28,7 +28,10 @@ public:
     inline void drop_link(Link& link) {
 	_link_factory.drop_link(link);
     }
-    void dijkstra(City& src, City& dst);
+    void dijkstra_up_all_links();
+    void dijkstra_down_links_in_route(Route* route);
+    simtime_picosec get_rtt(Route* route);
+    void dijkstra(City& src, City& dst, simtime_picosec time);
     Route* find_route(City& dst);
     inline mem_b uplinkqueuesize() const {return _linkqueuesize[::UPLINK];}
     inline mem_b downlinkqueuesize() const {return _linkqueuesize[::DOWNLINK];}

@@ -44,6 +44,7 @@ class Logfile {
     void writeRecord(uint32_t type, uint32_t id, uint32_t ev, 
 		     double val1, double val2, double val3); // prepend uint64_t time
     void addLogger(Logger& logger);
+    void removeLogger(Logger& logger);
     simtime_picosec _starttime;
  private:
     EventList& _eventlist;

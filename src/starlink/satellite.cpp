@@ -9,6 +9,12 @@ Satellite::Satellite(int planenum, int sat_in_plane, int sat_id,
 		     double period_in_secs, double altitude) :
     _planenum(planenum), _sat_in_plane(sat_in_plane), _sat_id(sat_id)
 {
+#ifdef XCP_STATIC_NETWORK
+    _raan = raan;
+    _mean_anomaly = mean_anomaly;
+    _last_coords_update = 1; // force pos update
+    update_coordinates(0);
+#else
     _inclination = radFromDeg(inclination);
     _raan = radFromDeg(raan);
     _mean_anomaly = radFromDeg(mean_anomaly);
@@ -17,9 +23,14 @@ Satellite::Satellite(int planenum, int sat_in_plane, int sat_id,
     _last_coords_update = 1; // force pos update
     update_coordinates(0);
     cout << "satinit: " << position() << endl;
+#endif
 }
 
 void Satellite::update_coordinates(simtime_picosec time) {
+#ifdef XCP_STATIC_NETWORK
+    Eigen::Vector3d v(_raan,_mean_anomaly,0);
+    _coordinates = v;
+#else
     if (_last_coords_update == time)
 	return;
     _last_coords_update = time;
@@ -33,5 +44,6 @@ void Satellite::update_coordinates(simtime_picosec time) {
     if (_sat_id == 0) {
 	cout << "Sat 0: " << position() << endl;
     }
+#endif
 }
 

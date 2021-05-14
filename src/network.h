@@ -39,7 +39,7 @@ class PacketFlow : public Logged {
 };
 
 
-typedef enum {IP, TCP, TCPACK, TCPNACK, NDP, NDPACK, NDPNACK, NDPPULL, NDPLITE, NDPLITEACK, NDPLITEPULL, NDPLITERTS, XCP, XCPACK, ETH_PAUSE} packet_type;
+typedef enum {IP, TCP, TCPACK, TCPNACK, NDP, NDPACK, NDPNACK, NDPPULL, NDPLITE, NDPLITEACK, NDPLITEPULL, NDPLITERTS, XCP, XCPACK, ETH_PAUSE, XCPCTL, XCPCTLACK} packet_type;
 
 class VirtualQueue {
  public:
@@ -162,7 +162,7 @@ class PacketDB {
     };
     void freePacket(P* pkt) {
 	assert(pkt->route());
-	pkt->route()->decr_refcount();
+	//pkt->route()->decr_refcount();
 	_freelist.push_back(pkt);
     };
 

@@ -42,11 +42,17 @@ class XcpSrc : public PacketSink, public EventSource {
 	cout << "Setting flow size to " << _flow_size << endl;
     }
 
+    void set_mpxcp_xrc(MultipathXcpSrc* src);
+
     void set_ssthresh(uint64_t s){_ssthresh = s;}
+
+    linkspeed_bps throughput() const;
+    linkspeed_bps route_max_throughput() const;
 
     //uint32_t effective_window();
     virtual void rtx_timer_hook(simtime_picosec now,simtime_picosec period);
     virtual const string& nodename() { return _nodename; }
+    simtime_picosec rtt() const {return _rtt;}
 
     // should really be private, but loggers want to see:
     uint64_t _highest_sent;  //seqno is in bytes
@@ -57,7 +63,9 @@ class XcpSrc : public PacketSink, public EventSource {
     uint64_t _last_acked;
     uint32_t _ssthresh;
     uint16_t _dupacks;
-    int32_t _app_limited;  // Unit: bytes/second
+    linkspeed_bps _app_limited;  // Unit: bits/second
+
+    int64_t _route_max_throughput;
 
     //round trip time estimate, needed for coupled congestion control
     simtime_picosec _rtt, _rto, _mdev;
@@ -81,7 +89,13 @@ class XcpSrc : public PacketSink, public EventSource {
     simtime_picosec _RFC2988_RTO_timeout;
     bool _rtx_timeout_pending;
 
+    static simtime_picosec MIN_CTL_PACKET_TIMEOUT;
+    static simtime_picosec MAX_CTL_PACKET_TIMEOUT;
+    simtime_picosec _ctl_packet_timeout;
+
     void set_app_limit(int pktps);
+    void set_app_limit(double bitsps);
+    linkspeed_bps get_app_limit() const {return _app_limited;}
 
     const Route* _route;
     //simtime_picosec _last_ping;
@@ -89,12 +103,16 @@ class XcpSrc : public PacketSink, public EventSource {
 	
     int _subflow_id;
 
+    void set_instantaneous_queue(mem_b size);
+    mem_b get_instantaneous_queuesize() const;
+
     //virtual void inflate_window();
     //virtual void deflate_window();
 
  private:
-
-    static const int32_t MAX_THROUGHPUT = INT32_MAX;
+    static const size_t START_PACKET_NUMBER = 2;
+    static const int32_t MAX_THROUGHPUT = INT32_MAX - 1;
+    static const double THROUGHPUT_TUNING_P;
 
     const Route* _old_route;
     uint64_t _last_packet_with_old_route;
@@ -115,6 +133,17 @@ class XcpSrc : public PacketSink, public EventSource {
     //void clearWhen(XcpAck::seq_t from, XcpAck::seq_t to);
     //void showWhen (int from, int to);
     string _nodename;
+
+    MultipathXcpSrc* _mpxcp_src;
+    mem_b _instantaneous_queuesize;
+    mem_b _instantaneous_sent;
+    mem_b _persistent_sent;
+
+    simtime_picosec _last_rtt_start_time;
+
+    simtime_picosec _last_tuning_start_time;
+    mem_b _last_tuning_queue_size;
+    bool _can_update_last_tuning_stat;
 };
 
 class XcpSink : public PacketSink, public DataReceiver, public Logged {
@@ -134,12 +163,12 @@ class XcpSink : public PacketSink, public DataReceiver, public Logged {
     list<XcpAck::seq_t> _received; /* list of packets above a hole, that 
 				      we've received */
     XcpSrc* _src;
+    const Route* _route;
  private:
     // Connectivity
     uint16_t _crt_path;
 
     void connect(XcpSrc& src, const Route& route);
-    const Route* _route;
 
     // Mechanism
     void send_ack(simtime_picosec ts,bool marked, uint32_t cwnd, int32_t demand,
@@ -153,6 +182,7 @@ class XcpRtxTimerScanner : public EventSource {
     XcpRtxTimerScanner(simtime_picosec scanPeriod, EventList& eventlist);
     void doNextEvent();
     void registerXcp(XcpSrc &xcpsrc);
+    void unregisterXcp(XcpSrc &xcpsrc);
  private:
     simtime_picosec _scanPeriod;
     typedef list<XcpSrc*> xcps_t;

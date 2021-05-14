@@ -33,6 +33,8 @@ class InactiveSat {
 class City : public Node {
  public:
     City(double latitude, double longitude, Constellation& constellation);
+    Logged* logged() const;
+    void set_logged(Logged* logged);
     void add_uplinks(Satellite *sats[], size_t numsats, simtime_picosec time);
     void update_coordinates(simtime_picosec time);
     void update_uplinks(simtime_picosec time);
@@ -55,6 +57,7 @@ class City : public Node {
     vector<ActiveUplink*> _active_uplinks;  // sorted so longest is at the end
     vector<InactiveSat*> _inactive_sats;    // sorted so shortest is at the end
     simtime_picosec _last_full_update;
+    Logged* _logged;
 };
 
 #endif

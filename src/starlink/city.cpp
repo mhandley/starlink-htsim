@@ -8,7 +8,12 @@
 
 // assume 57 degrees from vertical
 //#define MAXDIST 1010
+#ifdef XCP_STATIC_NETWORK
+#define MAXDIST 10
+#else
 #define MAXDIST 1123
+#endif
+
 
 bool active_uplink_cmp(ActiveUplink* l1, ActiveUplink* l2) {
     return l1->_dist < l2->_dist;
@@ -23,6 +28,14 @@ bool inactive_sat_cmp(InactiveSat* s1, InactiveSat* s2) {
 City::City(double latitude, double longitude, Constellation& constellation)
     : _constellation(constellation)
 {
+#ifdef XCP_STATIC_NETWORK
+	_latitude = latitude;
+	_longitude = longitude;
+	_last_coords_update = 1; // force pos update
+    _last_full_update = 0;
+    update_coordinates(0);
+    add_uplinks(_constellation.sats(), _constellation.num_sats(), 0);
+#else
     // store lat, long in radians
     _latitude = radFromDeg(latitude);
     _longitude = radFromDeg(longitude);
@@ -30,9 +43,22 @@ City::City(double latitude, double longitude, Constellation& constellation)
     _last_full_update = 0;
     update_coordinates(0);
     add_uplinks(_constellation.sats(), _constellation.num_sats(), 0);
+#endif
+}
+
+Logged* City::logged() const {
+	return _logged;
+}
+
+void City::set_logged(Logged* logged) {
+	_logged = logged;
 }
 
 void City::update_coordinates(simtime_picosec time) {
+#ifdef XCP_STATIC_NETWORK
+	Eigen::Vector3d v(_latitude,_longitude,0);
+	_coordinates = v;
+#else
     // To calculate city coordinates, place city on x-axis, rotate by
     // latitude around y-axis, then rotate by longitude + time*speed
     // around z-axis
@@ -50,6 +76,7 @@ void City::update_coordinates(simtime_picosec time) {
     Eigen::AngleAxis<double> r_long(long_angle, Eigen::Vector3d(0.0, 0.0, -1.0));
     _coordinates = r_long*r_lat*v;
     cout << timeAsSec(time) << " City coords(" << this << ") " << position() << endl;
+#endif
 }
 
 void City::add_uplinks(Satellite* sats[], size_t num_sats,simtime_picosec time) {
@@ -57,6 +84,7 @@ void City::add_uplinks(Satellite* sats[], size_t num_sats,simtime_picosec time) 
     for (size_t i = 0; i < num_sats; i++) {
 	double dist = distance((Node&)(*sats[i]), time);
 	if (dist < mindist) mindist = dist;
+	cout << "DIST: " << dist << " MAXDIST: " << MAXDIST << endl;
 	//cout << "Sat " << i << " dist " << dist << " mindist " << mindist << endl;
 	if (dist < MAXDIST) {
 	    Link& uplink =
@@ -81,6 +109,8 @@ void City::add_uplinks(Satellite* sats[], size_t num_sats,simtime_picosec time) 
 }
 
 void City::update_uplinks(simtime_picosec time) {
+#ifdef XCP_STATIC_NETWORK
+#else
     for (int i = 0; i < _active_uplinks.size(); i++) {
 	Satellite& s = _active_uplinks[i]->_sat;
 	double dist = distance((Node&)s, time);
@@ -188,14 +218,19 @@ void City::update_uplinks(simtime_picosec time) {
     for (int i = 0; i < newly_inactive_count; i++) {
 	_inactive_sats.push_back(newly_inactive[i]);
     }
+#endif
 }
 
 Route* City::find_route(City& dst, simtime_picosec time) {
     Route* rt = NULL;
-    update_uplinks(time);
-    dst.update_uplinks(time);
-    _constellation.dijkstra(*this, dst);
+	cout << "FIND ROUTE DIJKSTRA" << endl;
+    _constellation.dijkstra(*this, dst, time);
+	cout << "FIND ROUTE FIND ROUTE" << endl;
     rt = _constellation.find_route(dst);
-    rt->use_refcount();
+	cout << "FIND ROUTE FINISH" << endl;
+	if (rt) {
+        rt->use_refcount();
+		rt->incr_refcount();
+	}
     return rt;
 }

@@ -123,4 +123,7 @@ private:
 	
 	string _nodename;
 };
+
+#undef A
+#undef B
 #endif

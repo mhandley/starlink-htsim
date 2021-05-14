@@ -22,6 +22,7 @@ void Node::add_link_to_dst(Node& dst, linkspeed_bps bitrate, mem_b maxqueuesize)
 }
 
 void Node::add_link(Link& link) {
+    cout << "Adding link " << _link_count << endl;
     //cout << "add_link, this: " << this << " src: " << &(link.src()) << endl;
     assert(&(link.src()) == this);
     assert(_link_count < MAXLINKS);
@@ -39,6 +40,8 @@ void Node::remove_link(Link& link) {
 double Node::distance(Node& dst, simtime_picosec time) {
     update_coordinates(time);
     dst.update_coordinates(time);
+    cout << "This Coordinates: " << _coordinates[0] << " " << _coordinates[1] << " " << _coordinates[2] << endl;
+    cout << "Dst Coordinates: " << dst.coordinates()[0] << " " << dst.coordinates()[1] << " " << dst.coordinates()[2] << endl;
     double dist = (_coordinates - dst.coordinates()).norm();
     // cout << "time: " << timeAsMs(time) << " dist: " << dist << endl;
     return dist;

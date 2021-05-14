@@ -236,6 +236,9 @@ int main(int argc, char** argv){
 	    case Logger::XCP_SINK: //20
 		cout << XcpSinkLoggerSampling::event_to_str(event) << endl;
 		break;
+		case Logger::MPXCP:
+		cout << MultipathXcpLoggerSimple::event_to_str(event) << endl;
+		break;
 	    }
 	} else {
 	    if ((typeRec[i]==(uint32_t)TYPE || TYPE==-1) 

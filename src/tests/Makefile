@@ -1,7 +1,7 @@
 CC = g++
-CFLAGS = -Wall -g
+CFLAGS = -Wall -g -D XCP_STATIC_NETWORK -D MPXCP_VERSION_1
 CRT="`pwd`"
-INCLUDE= -I/$(CRT)/.. -I$(CRT) 
+INCLUDE= -I/$(CRT)/.. -I$(CRT) -I/$(CRT)/../starlink
 #-I$(CRT)/ksp -I$(CRT)/ksp/boost
 LIB=-L.. 
 #-Lksp
