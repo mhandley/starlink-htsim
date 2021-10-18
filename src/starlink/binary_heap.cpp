@@ -41,7 +41,7 @@ void BinaryHeap::insert_at_infinity(Node& node) {
 	return;
     }
 
-    node.set_dist(INFINITY);
+    node.set_dist(DIST_INFINITY);
     node.clear_routing();
     set_node(_size, &node);
     _size++;
