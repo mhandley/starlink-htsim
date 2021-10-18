@@ -60,7 +60,7 @@ Route::decr_refcount() const {
 
 string Route::str() const {
     string s = "Route: ";
-    for (int i = 0; i < _sinklist.size(); i++) {
+    for (size_t i = 0; i < _sinklist.size(); i++) {
 	cout << "i: " << i << "\n";
 	cout << _sinklist[i] << endl;
 	s += _sinklist[i]->nodename() + " ";
