@@ -7,13 +7,13 @@
 #include <math.h>
 using namespace std;
 
-#ifdef __clang__
+//#ifdef __clang__
 #include <unordered_map>
 #define hashmap unordered_map
-#else
-#include <ext/hash_map>
-#define hashmap __gnu_cxx::hash_map
-#endif
+//#else
+//#include <ext/hash_map>
+//#define hashmap __gnu_cxx::hash_map
+//#endif
 
 #include <vector>
 
