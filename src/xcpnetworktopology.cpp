@@ -107,4 +107,6 @@ Link* XcpNetworkTopology::get_reverse_link(Link* link) const {
             return *it;
         }
     }
+    // shouldn't get here
+    abort();
 }

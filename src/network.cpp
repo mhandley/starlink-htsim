@@ -211,7 +211,7 @@ PacketFlow::logTraffic(Packet& pkt, Logged& location, TrafficLogger::TrafficEven
 }
 
 void print_route(const Route& route) {
-    for (int i = 0; i < route.size(); i++) {
+    for (size_t i = 0; i < route.size(); i++) {
 	PacketSink* sink = route.at(i);
 	if (i > 0) 
 	    cout << " -> ";

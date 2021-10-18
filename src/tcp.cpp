@@ -403,7 +403,7 @@ TcpSrc::inflate_window() {
 // Note: the data sequence number is the number of Byte1 of the packet, not the last byte.
 void 
 TcpSrc::send_packets() {
-    int c = _cwnd;
+    uint32_t c = _cwnd;
 
     if (!_established){
 	//send SYN packet and wait for SYN/ACK

@@ -259,8 +259,8 @@ CompositePrioQueue::find_max_path_len_queued() {
 
 void
 CompositePrioQueue::check_queued() {
-    int maxpath = 0, total_queued = 0;
-    for (int i = 0; i < MAX_PATH_LEN; i++) {
+    uint32_t maxpath = 0, total_queued = 0;
+    for (uint32_t i = 0; i < MAX_PATH_LEN; i++) {
 	if (_enqueued_path_lens[i] > 0) {
 	    maxpath = i;
 	    total_queued += _enqueued_path_lens[i];
@@ -325,7 +325,7 @@ CompositePrioQueue::trim_low_priority_packet(uint32_t prio) {
     for (i = _enqueued_low.begin(); i != _enqueued_low.end(); i++) {
 	cout << "pathlen: " << (*i)->path_len() << endl;
     }
-    for (int c = 0; c <= _max_path_len_seen; c++) {
+    for (uint32_t c = 0; c <= _max_path_len_seen; c++) {
 	cout << "len: " << c << " count: " << _enqueued_path_lens[c] << endl;
     }
     abort();

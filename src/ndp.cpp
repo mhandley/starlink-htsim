@@ -105,7 +105,7 @@ void NdpSrc::log_me() {
 }
 
 void NdpSrc::set_paths(vector<const Route*>* rt_list){
-    int no_of_paths = rt_list->size();
+    size_t no_of_paths = rt_list->size();
     switch(_route_strategy) {
     case NOT_SET:
     case SINGLE_PATH:
@@ -125,7 +125,7 @@ void NdpSrc::set_paths(vector<const Route*>* rt_list){
 	_path_counts_rtx.resize(no_of_paths);
 	_path_counts_rto.resize(no_of_paths);
 
-	for (unsigned int i=0; i < no_of_paths; i++){
+	for (size_t i=0; i < no_of_paths; i++){
 	    Route* tmp = new Route(*(rt_list->at(i)));
 	    tmp->add_endpoints(this, _sink);
 	    tmp->set_path_id(i, rt_list->size());
@@ -852,7 +852,7 @@ void NdpSrc::doNextEvent() {
 void NdpSrc::print_stats() {
     cout << _nodename << "\n";
     int total_new = 0, total_rtx = 0, total_rto = 0;
-    for (int i = 0; i < _paths.size(); i++) {
+    for (size_t i = 0; i < _paths.size(); i++) {
 	cout << _path_counts_new[i] << "/" << _path_counts_rtx[i] << "/" << _path_counts_rto[i] << " ";
 	total_new += _path_counts_new[i];
 	total_rtx += _path_counts_rtx[i];

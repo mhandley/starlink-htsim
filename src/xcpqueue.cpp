@@ -30,8 +30,8 @@ XcpQueue::XcpQueue(linkspeed_bps bitrate, mem_b maxsize,
       _epsilon_p(0),
       _epsilon_n(0),
       _queue_update_time(0),
-      _min_queue_size(0),
       _persistent_queue_size(0),
+      _min_queue_size(0),
       _residue_pos_feedback(0),
       _residue_neg_feedback(0)
 {
