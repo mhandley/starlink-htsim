@@ -119,8 +119,8 @@ class SinkLoggerSampling : public Logger, public EventSource {
     typedef map<MultipathXcpSrc*,double,lttime> multipath_map_xcp;
     multipath_map _multipath_src;
     multipath_map _multipath_seq;
-    multipath_map_xcp _multipath_src_xcp;
-    multipath_map_xcp _multipath_seq_xcp;
+    //multipath_map_xcp _multipath_src_xcp;
+    //multipath_map_xcp _multipath_seq_xcp;
 	
     simtime_picosec _last_time;
     simtime_picosec _period;
