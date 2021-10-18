@@ -2,7 +2,7 @@
 #include "config.h"
 #include <sstream>
 #include <string.h>
-#include <strstream>
+//#include <strstream>
 #include <iostream>
 #include <math.h>
 #include "network.h"
