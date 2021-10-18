@@ -1,3 +1,4 @@
+#include <algorithm>
 #include "qcn.h"
 
 const int QcnPacket::PKTSIZE=1500;
@@ -98,7 +99,7 @@ void QcnReactor::onFeedback(double fb) {
   if (_packetCycles>0) _targetRate = _currentRate;
   _packetCycles = 0;
   _packetsSentInCurrentCycle = 0;
-  _currentRate = max(_currentRate*(1+QcnReactor::GAIN*fb),QcnReactor::MINRATE);
+  _currentRate = std::max(_currentRate*(1+QcnReactor::GAIN*fb),(double)QcnReactor::MINRATE);
   _logger->logQcn(*this,QcnLogger::QCN_DECD,0);
   }
 
@@ -108,7 +109,7 @@ void QcnQueue::onPacketReceived(QcnPacket &qpkt) {
 		double fbrange = _targetQueuesize * (1+2*QcnQueue::GAMMA);
 		double fb1 = - (_queuesize-_targetQueuesize) / fbrange;
 		double fb2 = - QcnQueue::GAMMA*(_queuesize-_lastSampledQueuesize) / fbrange;
-		double fb = max(-1,fb1 + fb2);
+		double fb = std::max((double)-1,fb1 + fb2);
 		if (fb<0) {
 			_qcnlogger->logQcnQueue(*this,QcnLogger::QCN_FB,fb,fb1,fb2);
 			QcnAck* ack = QcnAck::newpkt(qpkt, (QcnAck::fb_t)fb);
