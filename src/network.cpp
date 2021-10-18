@@ -2,7 +2,7 @@
 #include "network.h"
 
 #define DEFAULTDATASIZE 1500
-int Packet::_data_packet_size = DEFAULTDATASIZE;
+uint16_t Packet::_data_packet_size = DEFAULTDATASIZE;
 bool Packet::_packet_size_fixed = false;
 
 // use set_attrs only when we want to do a late binding of the route -

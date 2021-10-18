@@ -110,7 +110,7 @@ class Packet {
 	     int pkt_size, packetid_t id);
     void set_attrs(PacketFlow& flow, int pkt_size, packetid_t id);
 
-    static int _data_packet_size; // default size of a TCP, NDP or XCP data packet,
+    static uint16_t _data_packet_size; // default size of a TCP, NDP or XCP data packet,
 				  // measured in bytes
     static bool _packet_size_fixed; //prevent foot-shooting
     
