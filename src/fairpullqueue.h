@@ -27,7 +27,7 @@ class BasePullQueue {
     inline int32_t pull_count() const {return _pull_count;}
     inline bool empty() const {return _pull_count == 0;}
  protected:
-    int32_t _pull_count;
+    size_t _pull_count;
     int32_t _preferred_flow;
 };
 
