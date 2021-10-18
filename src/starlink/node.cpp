@@ -62,7 +62,7 @@ Node::clear_routing() {
 void Node::print_links() const {
     string mypos = position();
     string theirpos;
-    unordered_set<Link*>::iterator i;;
+    unordered_set<Link*>::const_iterator i;;
     for (i = _links.begin(); i != _links.end(); i++) {
 	theirpos = (*i)->dst().position();
 	cout << mypos << endl;
