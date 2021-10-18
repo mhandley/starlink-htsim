@@ -93,36 +93,33 @@ void XcpSrc::set_paths(vector<const Route*>* rt) {
 #endif
 
 void XcpSrc::set_app_limit(int pktps) {
-	// pktps in packets/second
-    //if (_app_limited==0 && pktps && _cwnd == 0){
-	if (_cwnd <= START_PACKET_NUMBER * _mss) {
-		_cwnd = START_PACKET_NUMBER * _mss;
+    // pktps in packets/second
+    if (_cwnd <= START_PACKET_NUMBER * _mss) {
+	_cwnd = START_PACKET_NUMBER * _mss;
     }
     _ssthresh = 0xffffffff;
-	linkspeed_bps old_limit = _app_limited;
-    _app_limited = static_cast<linkspeed_bps>(pktps) * static_cast<linkspeed_bps>(Packet::data_packet_size()) * static_cast<linkspeed_bps>(8);
-	if (_established && old_limit < _app_limited) {
+    linkspeed_bps old_limit = _app_limited;
+    _app_limited = static_cast<linkspeed_bps>(pktps * Packet::data_packet_size() * 8);
+    if (_established && old_limit < _app_limited) {
     	send_packets();
-	}
+    }
 }
 
 void XcpSrc::set_app_limit(double bitsps) {
-	static const double zero = 0.99;
-	if (bitsps <= 0) {
-		bitsps = 0;
-		//_cwnd = 0;
-	}
-	uint32_t old_cwnd = _cwnd;
-	//if (_app_limited == 0 && bitsps > zero) {
-	if (_cwnd <= START_PACKET_NUMBER * _mss) {
-		_cwnd = START_PACKET_NUMBER * _mss;
-	}
-	_ssthresh = 0xffffffff;
-	linkspeed_bps old_limit = _app_limited;
+    if (bitsps <= 0) {
+	bitsps = 0;
+	//_cwnd = 0;
+    }
+    uint32_t old_cwnd = _cwnd;
+    if (_cwnd <= START_PACKET_NUMBER * _mss) {
+	_cwnd = START_PACKET_NUMBER * _mss;
+    }
+    _ssthresh = 0xffffffff;
+    linkspeed_bps old_limit = _app_limited;
     _app_limited = bitsps;
-	if (_established && (old_limit < _app_limited || old_cwnd <= START_PACKET_NUMBER * _mss)) {
+    if (_established && (old_limit < _app_limited || old_cwnd <= START_PACKET_NUMBER * _mss)) {
     	send_packets();
-	}
+    }
 }
 
 void 

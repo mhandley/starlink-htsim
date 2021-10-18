@@ -19,7 +19,7 @@ class Pipe : public EventSource, public PacketSink {
     Pipe(simtime_picosec delay, EventList& eventlist);
     void receivePacket(Packet& pkt); // inherited from PacketSink
     void doNextEvent(); // inherited from EventSource
-    virtual simtime_picosec delay() { return _delay; }
+    virtual simtime_picosec delay(simtime_picosec time = 0) { return _delay; }
     const string& nodename() { return _nodename; }
     void set_delay(simtime_picosec delay) {_delay = delay;}  // used when link delay changes
  protected:
