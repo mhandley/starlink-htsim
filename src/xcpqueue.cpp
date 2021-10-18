@@ -308,11 +308,11 @@ XcpQueue::update_persistent_queue_size() {
 
         simtime_picosec Tq = XCP_TOLERATE_QUEUE_TIME;
         //simtime_picosec Tq2 = (_mean_rtt - _queuesize * timeFromSec(1) * 8.0 / _bitrate) / 2.0;
-		int64_t Tq2 = (static_cast<double>(_mean_rtt) - _queuesize * static_cast<double>(timeFromSec(1)) * 8.0 / static_cast<double>(_bitrate)) / 2.0;
-		if (Tq2 < 0) {
-			Tq2 = 0;
-		}
-        if (Tq < Tq2) {
+	int64_t Tq2 = (static_cast<double>(_mean_rtt) - _queuesize * timeFromSec(1) * 8.0 / static_cast<double>(_bitrate)) / 2.0;
+	if (Tq2 < 0) {
+	    Tq2 = 0;
+	}
+        if (Tq < static_cast<simtime_picosec>(Tq2)) {
             Tq = Tq2;
         }
         _queue_update_time = eventlist().now() + Tq;
