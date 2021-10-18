@@ -18,11 +18,11 @@ FifoPullQueue<PullPkt>::FifoPullQueue() {
 template<class PullPkt>
 void
 FifoPullQueue<PullPkt>::enqueue(PullPkt& pkt) {
-    if (this->_preferred_flow>=0 && pkt.flow_id() == this->_preferred_flow){
-	//cout << "Got a pkt from the preffered flow " << pull_pkt->flow_id()<<endl;
+    if (this->_preferred_flow>=0 && pkt.flow_id() == (uint32_t)this->_preferred_flow){
+	//cout << "Got a pkt from the prefered flow " << pull_pkt->flow_id()<<endl;
 	typename list<PullPkt*>::iterator it = _pull_queue.begin();
 
-	while (it!=_pull_queue.end()&& ((PullPkt*)(*it))->flow_id()==this->_preferred_flow)
+	while (it!=_pull_queue.end()&& ((PullPkt*)(*it))->flow_id()==(uint32_t)this->_preferred_flow)
 	    it++;
 
 	_pull_queue.insert(it, &pkt);
@@ -51,7 +51,7 @@ FifoPullQueue<PullPkt>::dequeue() {
 
 template<class PullPkt>
 void
-FifoPullQueue<PullPkt>::flush_flow(int32_t flow_id) {
+FifoPullQueue<PullPkt>::flush_flow(uint32_t flow_id) {
     typename list<PullPkt*>::iterator it = _pull_queue.begin();
     while (it != _pull_queue.end()) {
 	PullPkt* pull = *it;
@@ -110,7 +110,7 @@ FairPullQueue<PullPkt>::dequeue() {
 
 template<class PullPkt>
 void
-FairPullQueue<PullPkt>::flush_flow(int32_t flow_id) {
+FairPullQueue<PullPkt>::flush_flow(uint32_t flow_id) {
     typename map <int32_t, list<PullPkt*>*>::iterator i;
     i = _queue_map.find(flow_id);
     if (i == _queue_map.end())

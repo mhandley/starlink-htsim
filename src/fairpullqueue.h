@@ -20,7 +20,7 @@ class BasePullQueue {
     virtual ~BasePullQueue();
     virtual void enqueue(PullPkt& pkt) = 0;
     virtual PullPkt* dequeue() = 0;
-    virtual void flush_flow(int32_t flow_id) = 0;
+    virtual void flush_flow(uint32_t flow_id) = 0;
     virtual void set_preferred_flow(int32_t preferred_flow) {
 	_preferred_flow = preferred_flow;
     }
@@ -37,7 +37,7 @@ class FifoPullQueue : public BasePullQueue<PullPkt>{
     FifoPullQueue();
     virtual void enqueue(PullPkt& pkt);
     virtual PullPkt* dequeue();
-    virtual void flush_flow(int32_t flow_id);
+    virtual void flush_flow(uint32_t flow_id);
  protected:
     list<PullPkt*> _pull_queue;
 };
@@ -48,7 +48,7 @@ class FairPullQueue : public BasePullQueue<PullPkt>{
     FairPullQueue();
     virtual void enqueue(PullPkt& pkt);
     virtual PullPkt* dequeue();
-    virtual void flush_flow(int32_t flow_id);
+    virtual void flush_flow(uint32_t flow_id);
  protected:
     map<int32_t, list<PullPkt*>*> _queue_map;  // map flow id to pull queue
     bool queue_exists(const PullPkt& pkt);
