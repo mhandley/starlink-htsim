@@ -1,6 +1,8 @@
-// -*- c-basic-offset: 4; tab-width: 8; indent-tabs-mode: t -*-                                                                                                               
-#define XCP_STATIC_NETWORK
-#define MPXCP_VERSION_1
+// -*- c-basic-offset: 4; tab-width: 8; indent-tabs-mode: t -*-
+
+// The following are defined on the command line in the Makefile
+//#define XCP_STATIC_NETWORK
+//#define MPXCP_VERSION_1
 
 #include "xcpnetworktopology.h"
 #include "ping.h"

@@ -3,6 +3,7 @@
 #include <math.h>
 #include "isl.h"
 #include "satellite.h"
+#define UNUSED(expr) (void)(expr)
 
 Satellite::Satellite(int planenum, int sat_in_plane, int sat_id,
 		     double inclination, double raan, double mean_anomaly,
@@ -14,6 +15,11 @@ Satellite::Satellite(int planenum, int sat_in_plane, int sat_id,
     _mean_anomaly = mean_anomaly;
     _last_coords_update = 1; // force pos update
     update_coordinates(0);
+    _altitude = 0;
+    _period = 0;
+    _inclination = 0;
+    UNUSED(_sat_id);
+    UNUSED(_inclination);
 #else
     _inclination = radFromDeg(inclination);
     _raan = radFromDeg(raan);
@@ -24,6 +30,8 @@ Satellite::Satellite(int planenum, int sat_in_plane, int sat_id,
     update_coordinates(0);
     cout << "satinit: " << position() << endl;
 #endif
+    UNUSED(_planenum);
+    UNUSED(_sat_in_plane);
 }
 
 void Satellite::update_coordinates(simtime_picosec time) {

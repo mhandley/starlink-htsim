@@ -16,8 +16,6 @@ Constellation::Constellation(EventList& eventlist,
     _link_factory(eventlist), heap(MAXNODES), _route_src(0)
 {
 #ifdef XCP_STATIC_NETWORK
-    Logfile* lg;
-
     _linkbitrate[::UPLINK] = uplinkbitrate;
     _linkbitrate[::DOWNLINK] = downlinkbitrate;
     _linkbitrate[::ISL] = islbitrate;
@@ -51,8 +49,6 @@ Constellation::Constellation(EventList& eventlist,
 	_sats[7]->add_link_to_dst(*(_sats[6]), _linkbitrate[ISL], _linkqueuesize[ISL]);
 
 #else
-    Logfile* lg;
-
     _linkbitrate[::UPLINK] = uplinkbitrate;
     _linkbitrate[::DOWNLINK] = downlinkbitrate;
     _linkbitrate[::ISL] = islbitrate;
