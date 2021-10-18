@@ -17,7 +17,7 @@ class TcpSrcPeriodic: public TcpSrc {
 public:
   TcpSrcPeriodic(TcpLogger* logger, TrafficLogger* pktLogger, EventList &eventlist,simtime_picosec active=0,simtime_picosec idle=0);
 
-  void connect(route_t& routeout, route_t& routeback, TcpSink& sink, simtime_picosec starttime);
+  virtual void connect(const Route& routeout, const Route& routeback, TcpSink& sink, simtime_picosec starttime);
 
   void receivePacket(Packet& pkt);
   void reset();

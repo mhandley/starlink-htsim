@@ -21,15 +21,14 @@ Packet::set_attrs(PacketFlow& flow, int pkt_size, packetid_t id){
 void 
 Packet::set_route(PacketFlow& flow, const Route &route, int pkt_size, 
 	    packetid_t id){
-    cout << "SETTING ROUTE in NETWORK" << endl;
+    //cout << "SETTING ROUTE in NETWORK" << endl;
     _flow = &flow;
     _size = pkt_size;
     _id = id;
     _nexthop = 0;
     if (_route != &route) {
         if (_route) {
-            cout << "DECR in PACKET SET ROUTE" << endl;
-	        _route->decr_refcount();
+	    _route->decr_refcount();
         }
         _route = &route;
         _route->incr_refcount();
@@ -42,8 +41,7 @@ void
 Packet::set_route(const Route &route){
     if (_route != &route) {
         if (_route) {
-            cout << "DECR in PACKET SET ROUTE" << endl;
-	        _route->decr_refcount();
+	    _route->decr_refcount();
         }
         _route = &route;
         _route->incr_refcount();
@@ -62,8 +60,8 @@ Packet::sendOn() {
 	    nextsink = _route->reverse()->at(_nexthop);
 	    _nexthop++;
 	} else {
-        cout << "Route addr: " << _route << endl;
-        cout << "NEXTHOP: " << _nexthop << " ROUTE SIZE: " << _route->size() << endl;
+	    //cout << "Route addr: " << _route << endl;
+	    //cout << "NEXTHOP: " << _nexthop << " ROUTE SIZE: " << _route->size() << endl;
 	    assert(_nexthop<_route->size());
 	    nextsink = _route->at(_nexthop);
 	    _nexthop++;
@@ -176,6 +174,12 @@ Packet::str() const {
 	break;
     case XCP:
 	s = "XCP";
+	break;
+    case XCPCTL:
+	s = "XCPCTL";
+	break;
+    case XCPCTLACK:
+	s = "XCPCTLACK";
 	break;
     case XCPACK:
 	s = "XCPACK";

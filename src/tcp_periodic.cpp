@@ -38,7 +38,8 @@ void TcpSrcPeriodic::reset(){
 }
 
 void 
-TcpSrcPeriodic::connect(route_t& routeout, route_t& routeback, TcpSink& sink, simtime_picosec starttime)
+TcpSrcPeriodic::connect(const Route& routeout, const Route& routeback,
+			TcpSink& sink, simtime_picosec starttime)
 {
   _is_active = false;
 

@@ -36,9 +36,10 @@ void
 Route::incr_refcount() const {
     if (_refcount != REFCOUNT_UNUSED) {
 	_refcount++;
+	cout << this << "incr_refcount, now " << _refcount << endl;
     }
-    cout << this << "incr_refcount, now " << _refcount << endl;
 }
+
 
 void
 Route::decr_refcount() const {

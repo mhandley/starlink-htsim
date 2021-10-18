@@ -674,7 +674,6 @@ void SinkLoggerSampling::monitorXcpSink(DataReceiver* sink){
 }
 
 void SinkLoggerSampling::doNextEvent(){
-    cout << "SinkLoggerSampling::doNextEvent\n";
     eventlist().sourceIsPendingRel(*this,_period);  
     simtime_picosec now = eventlist().now();
     simtime_picosec delta = now - _last_time;
@@ -684,7 +683,6 @@ void SinkLoggerSampling::doNextEvent(){
     double rate;
 
     for (uint64_t i = 0; i<_sinks.size(); i++){
-	cout << i << endl;
 	if (_last_seq[i] <= _sinks[i]->cumulative_ack()) {
 	    //this deals with resets for periodic sources
 	    deltaB = _sinks[i]->cumulative_ack() - _last_seq[i];
@@ -708,7 +706,6 @@ void SinkLoggerSampling::doNextEvent(){
 	    }
 	}
 	_last_seq[i] = _sinks[i]->cumulative_ack();
-	cout << "cum ack: " << _last_seq[i] << endl;
 	//_last_sndbuf[i] = _sinks[i]->sndbuf();
     }
 
@@ -740,7 +737,6 @@ void SinkLoggerSampling::doNextEvent(){
 		if (_multipath_xcp[i]) {
 			continue;
 		}
-		cout << i << endl;
 		if (_last_seq_xcp[i] <= _sinks_xcp[i]->cumulative_ack()) {
 	    	//this deals with resets for periodic sources
 	    	deltaB = _sinks_xcp[i]->cumulative_ack() - _last_seq_xcp[i];
@@ -756,7 +752,6 @@ void SinkLoggerSampling::doNextEvent(){
 	    	_last_rate_xcp[i] = rate;
 		}
 		_last_seq_xcp[i] = _sinks_xcp[i]->cumulative_ack();
-		cout << "cum ack: " << _last_seq_xcp[i] << endl;
 		//_last_sndbuf[i] = _sinks[i]->sndbuf();
     }
 
