@@ -69,10 +69,11 @@ class Packet {
 	// longer allow it to be changed, or all hell will break
 	// loose.
 	assert(_packet_size_fixed == false);
-	_data_packet_size = packet_size;
+	assert(packet_size > 0 && packet_size < 65536);
+	_data_packet_size = static_cast<uint16_t>(packet_size);
     }
 
-    static int data_packet_size() {
+    static uint16_t data_packet_size() {
 	_packet_size_fixed = true;
 	return _data_packet_size;
     }
