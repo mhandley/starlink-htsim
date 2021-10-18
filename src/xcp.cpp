@@ -796,7 +796,7 @@ void XcpSrc::set_instantaneous_queue(mem_b size) {
 	}
 	_instantaneous_queuesize = size;
 	//_last_tuning_start_time = 0;
-	_last_tuning_start_time = (1ul << 60);
+	_last_tuning_start_time = ((simtime_picosec)1 << 60);
 }
 
 ////////////////////////////////////////////////////////////////
